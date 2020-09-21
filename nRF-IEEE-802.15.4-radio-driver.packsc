@@ -17,13 +17,18 @@
             "src/nrf_802154_request.h",
             "src/nrf_802154_rssi.h",
             "src/nrf_802154_rx_buffer.h",
+            "src/nrf_802154_stats.h",
             "src/nrf_802154_timer_coord.h",
             "src/mac_features/nrf_802154_filter.h",
             "src/mac_features/nrf_802154_frame_parser.h",
+            "src/mac_features/nrf_802154_ifs.h",
+            "src/mac_features/nrf_802154_tx_timeout.h",
             "src/mac_features/ack_generator/nrf_802154_ack_data.h",
             "src/mac_features/ack_generator/nrf_802154_ack_generator.h",
+            "src/platform/random/nrf_802154_random.h",
             "src/rsch/nrf_802154_rsch.h",
-            "src/rsch/nrf_802154_rsch_crit_sect.h"
+            "src/rsch/nrf_802154_rsch_crit_sect.h",
+            "src/timer_scheduler/nrf_802154_timer_sched.h"
         ],
         "_replacements": [
             {
@@ -47,14 +52,19 @@
                     "src/nrf_802154_critical_section.c",
                     "src/nrf_802154_debug.c",
                     "src/nrf_802154_pib.c",
+                    "src/nrf_802154_queue.c",
                     "src/nrf_802154_rssi.c",
                     "src/nrf_802154_rx_buffer.c",
+                    "src/nrf_802154_stats.c",
                     "src/nrf_802154_timer_coord.c",
+                    "src/nrf_802154_trx.c",
                     "src/fal/nrf_802154_fal.c",
                     "src/mac_features/nrf_802154_csma_ca.c",
                     "src/mac_features/nrf_802154_delayed_trx.c",
                     "src/mac_features/nrf_802154_filter.c",
                     "src/mac_features/nrf_802154_frame_parser.c",
+                    "src/mac_features/nrf_802154_ifs.c",
+                    "src/mac_features/nrf_802154_tx_timeout.c",
                     "src/mac_features/nrf_802154_precise_ack_timeout.c",
                     "src/mac_features/ack_generator/nrf_802154_ack_data.c",
                     "src/mac_features/ack_generator/nrf_802154_ack_generator.c",
@@ -94,13 +104,18 @@
                     "src/nrf_802154_critical_section.c",
                     "src/nrf_802154_debug.c",
                     "src/nrf_802154_pib.c",
+                    "src/nrf_802154_queue.c",
                     "src/nrf_802154_rssi.c",
                     "src/nrf_802154_rx_buffer.c",
+                    "src/nrf_802154_stats.c",
                     "src/nrf_802154_timer_coord.c",
+                    "src/nrf_802154_trx.c",
                     "src/mac_features/nrf_802154_csma_ca.c",
                     "src/mac_features/nrf_802154_delayed_trx.c",
                     "src/mac_features/nrf_802154_filter.c",
                     "src/mac_features/nrf_802154_frame_parser.c",
+                    "src/mac_features/nrf_802154_ifs.c",
+                    "src/mac_features/nrf_802154_tx_timeout.c",
                     "src/mac_features/nrf_802154_precise_ack_timeout.c",
                     "src/mac_features/ack_generator/nrf_802154_ack_data.c",
                     "src/mac_features/ack_generator/nrf_802154_ack_generator.c",
@@ -138,14 +153,19 @@
                     "src/nrf_802154_critical_section.c",
                     "src/nrf_802154_debug.c",
                     "src/nrf_802154_pib.c",
+                    "src/nrf_802154_queue.c",
                     "src/nrf_802154_rssi.c",
                     "src/nrf_802154_rx_buffer.c",
+                    "src/nrf_802154_stats.c",
                     "src/nrf_802154_timer_coord.c",
+                    "src/nrf_802154_trx.c",
                     "src/fal/nrf_802154_fal.c",
                     "src/mac_features/nrf_802154_csma_ca.c",
                     "src/mac_features/nrf_802154_delayed_trx.c",
                     "src/mac_features/nrf_802154_filter.c",
                     "src/mac_features/nrf_802154_frame_parser.c",
+                    "src/mac_features/nrf_802154_ifs.c",
+                    "src/mac_features/nrf_802154_tx_timeout.c",
                     "src/mac_features/nrf_802154_precise_ack_timeout.c",
                     "src/mac_features/ack_generator/nrf_802154_ack_data.c",
                     "src/mac_features/ack_generator/nrf_802154_ack_generator.c",
@@ -161,7 +181,8 @@
                     "src/timer_scheduler/nrf_802154_timer_sched.c",
                     "src/nrf_802154_notification_direct.c",
                     "src/nrf_802154_priority_drop_direct.c",
-                    "src/nrf_802154_request_direct.c"
+                    "src/nrf_802154_request_direct.c",
+                    "src/nrf_802154_swi.c"
                 ],
                 "_links": [
                     "nrfx_hal",
@@ -193,18 +214,23 @@
                     "cmock\\mock_nrf_802154_pib.c",
                     "cmock\\mock_nrf_802154_priority_drop.c",
                     "cmock\\mock_nrf_802154_procedures_duration.c",
+                    "cmock\\mock_nrf_802154_random.c",
                     "cmock\\mock_nrf_802154_request.c",
                     "cmock\\mock_nrf_802154_rsch.c",
                     "cmock\\mock_nrf_802154_rsch_crit_sect.c",
                     "cmock\\mock_nrf_802154_rssi.c",
                     "cmock\\mock_nrf_802154_rx_buffer.c",
-                    "cmock\\mock_nrf_802154_timer_coord.c"
+                    "cmock\\mock_nrf_802154_stats.c",
+                    "cmock\\mock_nrf_802154_timer_coord.c",
+                    "cmock\\mock_nrf_802154_timer_sched.c"
                 ],
                 "_includes": [
                     "cmock",
                     "src/mac_features",
                     "src/mac_features/ack_generator",
-                    "src/rsch"
+                    "src/platform/random",
+                    "src/rsch",
+                    "src/timer_scheduler"
                 ],
                 "_name": "cmock"
             },
@@ -232,6 +258,7 @@
                     "cmock\\mock_nrf_802154_rsch_crit_sect.c",
                     "cmock\\mock_nrf_802154_rssi.c",
                     "cmock\\mock_nrf_802154_rx_buffer.c",
+                    "cmock\\mock_nrf_802154_stats.c",
                     "cmock\\mock_nrf_802154_timer_coord.c"
                 ],
                 "_includes": [
@@ -427,6 +454,9 @@
                 "_attrs": [
                     "public"
                 ],
+                "_includes" : [
+                    "src/platform/coex"
+                ],                
                 "_name": "external"
             }
         ]
@@ -445,6 +475,9 @@
         "_description": "This option provides an array containing events logged by the driver.",
         "_defines": [
             "ENABLE_DEBUG_LOG"
+        ],
+        "_files": [
+            "src/nrf_802154_debug_log.c"
         ]
     },
 
@@ -453,6 +486,9 @@
         "_description": "This option disables all IRQ on an assert and enters indefinite loop.",
         "_defines": [
             "ENABLE_DEBUG_ASSERT"
+        ],
+        "_files": [
+            "src/nrf_802154_debug_assert.c"
         ]
     },
 
@@ -469,6 +505,9 @@
         "_description": "This option connects RADIO events with GPIO output.",
         "_defines": [
             "ENABLE_DEBUG_GPIO"
+        ],
+        "_files": [
+            "src/nrf_802154_debug_gpio.c"
         ]
     },
 

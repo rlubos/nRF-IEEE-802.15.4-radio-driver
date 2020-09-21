@@ -1,11 +1,16 @@
+
+#define NRF_802154_MODULE_ID NRF_802154_MODULE_ID_RSCH
+
 #include "nrf_802154_rsch.h"
 
 #include <assert.h>
 #include <stddef.h>
+#include <string.h>
 #include <nrf.h>
 
 #include "../nrf_802154_debug.h"
 #include "nrf_802154_priority_drop.h"
+#include "nrf_802154_stats.h"
 #include "platform/clock/nrf_802154_clock.h"
 #include "platform/coex/nrf_802154_wifi_coex.h"
 #include "raal/nrf_raal_api.h"
@@ -53,15 +58,13 @@ static volatile uint8_t     m_req_mutex;                     ///< Mutex for requ
 static volatile uint8_t     m_req_mutex_monitor;             ///< Mutex monitor, incremented every failed req mutex lock.
 static volatile rsch_prio_t m_last_notified_prio;            ///< Last reported approved priority level.
 static volatile rsch_prio_t m_approved_prios[RSCH_PREC_CNT]; ///< Priority levels approved by each precondition.
-static rsch_prio_t          m_requested_prio;                ///< Priority requested from all preconditions.
+static rsch_prio_mask_t     m_requested_prio_mask;           ///< Priority requested from all preconditions.
 static rsch_prio_t          m_cont_mode_prio;                ///< Continuous mode priority level. If continuous mode is not requested equal to @ref RSCH_PRIO_IDLE.
 
 typedef struct
 {
-    rsch_prio_t        prio;  ///< Delayed timeslot priority level. If delayed timeslot is not scheduled equal to @ref RSCH_PRIO_IDLE.
-    uint32_t           t0;    ///< Time base of the delayed timeslot trigger time.
-    uint32_t           dt;    ///< Time delta of the delayed timeslot trigger time.
-    nrf_802154_timer_t timer; ///< Timer used to trigger delayed timeslot.
+    nrf_802154_timer_t  timer; ///< Timer used to trigger delayed timeslot.
+    rsch_dly_ts_param_t param; ///< Parameters of the delayed timeslot.
 } dly_ts_t;
 
 static dly_ts_t m_dly_ts[RSCH_DLY_TS_NUM];
@@ -76,7 +79,7 @@ static dly_ts_t m_dly_ts[RSCH_DLY_TS_NUM];
  */
 static inline bool mutex_trylock(volatile uint8_t * p_mutex, volatile uint8_t * p_mutex_monitor)
 {
-    nrf_802154_log_entry(mutex_trylock, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
     do
     {
@@ -88,7 +91,7 @@ static inline bool mutex_trylock(volatile uint8_t * p_mutex, volatile uint8_t * 
 
             (*p_mutex_monitor)++;
 
-            nrf_802154_log_exit(mutex_trylock, 2);
+            nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 
             return false;
         }
@@ -97,7 +100,7 @@ static inline bool mutex_trylock(volatile uint8_t * p_mutex, volatile uint8_t * 
 
     __DMB();
 
-    nrf_802154_log_exit(mutex_trylock, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 
     return true;
 }
@@ -105,59 +108,61 @@ static inline bool mutex_trylock(volatile uint8_t * p_mutex, volatile uint8_t * 
 /** @brief Release mutex. */
 static inline void mutex_unlock(volatile uint8_t * p_mutex)
 {
-    nrf_802154_log_entry(mutex_unlock, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
     __DMB();
     *p_mutex = 0;
 
-    nrf_802154_log_exit(mutex_unlock, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 }
 
-/** @brief Check maximal priority level required by any of delayed timeslots at the moment.
+/** @brief Get mask of priorities required by all delayed timeslots at the moment.
  *
- * To meet delayed timeslot timing requirements there is a time window in which radio
- * preconditions should be requested. This function is used to prevent releasing preconditions
- * in this time window.
+ * For delayed timeslots of the @ref RSCH_DLY_TS_TYPE_PRECISE type, in order to meet their
+ * timing requirements there is a time window in which radio preconditions should be requested.
+ * This function is used to prevent releasing preconditions in this time window.
  *
- * @return  Maximal priority level required by delayed timeslots.
+ * For delayed timeslots of the @ref RSCH_DLY_TS_TYPE_RELAXED type, this function prevents
+ * releasing their preconditions as long as they are active (i.e. not cancelled explicitly).
+ *
+ * @return  Mask of priority levels required by delayed timeslots.
  */
-static rsch_prio_t max_prio_for_delayed_timeslot_get(void)
+static rsch_prio_mask_t prio_mask_for_delayed_timeslot_get(void)
 {
-    nrf_802154_log_entry(max_prio_for_delayed_timeslot_get, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
-    rsch_prio_t result = RSCH_PRIO_IDLE;
-    uint32_t    now    = nrf_802154_timer_sched_time_get();
+    rsch_prio_mask_t result = RSCH_PRIO_IDLE;
+    uint32_t         now    = nrf_802154_timer_sched_time_get();
 
     for (uint32_t i = 0; i < RSCH_DLY_TS_NUM; i++)
     {
-        dly_ts_t * p_dly_ts = &m_dly_ts[i];
-        uint32_t   t0       = p_dly_ts->t0;
-        uint32_t   dt       = p_dly_ts->dt - PREC_RAMP_UP_TIME -
-                              nrf_802154_timer_sched_granularity_get();
+        dly_ts_t  * p_dly_ts    = &m_dly_ts[i];
+        rsch_prio_t dly_ts_prio = p_dly_ts->param.prio;
+        uint32_t    t0          = p_dly_ts->param.t0;
+        uint32_t    dt          = p_dly_ts->param.dt - PREC_RAMP_UP_TIME -
+                                  nrf_802154_timer_sched_granularity_get();
 
-        if ((p_dly_ts->prio > result) && !nrf_802154_timer_sched_time_is_in_future(now, t0, dt))
+        if ((p_dly_ts->param.type == RSCH_DLY_TS_TYPE_PRECISE) &&
+            nrf_802154_timer_sched_time_is_in_future(now, t0, dt))
         {
-            result = p_dly_ts->prio;
+            dly_ts_prio = RSCH_PRIO_IDLE;
         }
+
+        result |= dly_ts_prio;
     }
 
-    nrf_802154_log_exit(max_prio_for_delayed_timeslot_get, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 
     return result;
 }
 
-static rsch_prio_t required_prio_lvl_get(void)
+static rsch_prio_mask_t required_prio_lvl_mask_get(void)
 {
-    nrf_802154_log_entry(required_prio_lvl_get, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
-    rsch_prio_t result = max_prio_for_delayed_timeslot_get();
+    rsch_prio_mask_t result = prio_mask_for_delayed_timeslot_get() | m_cont_mode_prio;
 
-    if (m_cont_mode_prio > result)
-    {
-        result = m_cont_mode_prio;
-    }
-
-    nrf_802154_log_exit(required_prio_lvl_get, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 
     return result;
 }
@@ -172,49 +177,42 @@ static rsch_prio_t required_prio_lvl_get(void)
  */
 static inline void prec_approved_prio_set(rsch_prec_t prec, rsch_prio_t prio)
 {
-    nrf_802154_log_entry(prec_approved_prio_set, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
     assert(prec <= RSCH_PREC_CNT);
-
-    if ((m_requested_prio == RSCH_PRIO_IDLE) && (prio != RSCH_PRIO_IDLE))
-    {
-        // Ignore approved precondition - it was not requested.
-        return;
-    }
-
     assert((m_approved_prios[prec] != prio) || (prio == RSCH_PRIO_IDLE));
 
     m_approved_prios[prec] = prio;
 
-    nrf_802154_log_exit(prec_approved_prio_set, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 }
 
 /** @brief Request all preconditions.
  */
 static inline void all_prec_update(void)
 {
-    nrf_802154_log_entry(all_prec_update, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
-    rsch_prio_t prev_prio;
-    rsch_prio_t new_prio;
-    uint8_t     monitor;
+    rsch_prio_mask_t prev_prio_mask;
+    rsch_prio_mask_t new_prio_mask;
+    uint8_t          monitor;
 
     do
     {
         if (!mutex_trylock(&m_req_mutex, &m_req_mutex_monitor))
         {
-            return;
+            break;
         }
 
-        monitor   = m_req_mutex_monitor;
-        prev_prio = m_requested_prio;
-        new_prio  = required_prio_lvl_get();
+        monitor        = m_req_mutex_monitor;
+        prev_prio_mask = m_requested_prio_mask;
+        new_prio_mask  = required_prio_lvl_mask_get();
 
-        if (prev_prio != new_prio)
+        if (prev_prio_mask != new_prio_mask)
         {
-            m_requested_prio = new_prio;
+            m_requested_prio_mask = new_prio_mask;
 
-            if (new_prio == RSCH_PRIO_IDLE)
+            if (new_prio_mask == RSCH_PRIO_IDLE)
             {
                 nrf_802154_priority_drop_hfclk_stop();
                 prec_approved_prio_set(RSCH_PREC_HFCLK, RSCH_PRIO_IDLE);
@@ -222,22 +220,31 @@ static inline void all_prec_update(void)
                 nrf_raal_continuous_mode_exit();
                 prec_approved_prio_set(RSCH_PREC_RAAL, RSCH_PRIO_IDLE);
             }
-            else
+            else if (prev_prio_mask == RSCH_PRIO_IDLE)
             {
+                // If the previously requested priority is IDLE,
+                // both HFCLK and RAAL preconditions should be idle.
+                assert(m_approved_prios[RSCH_PREC_HFCLK] == RSCH_PRIO_IDLE);
+                assert(m_approved_prios[RSCH_PREC_RAAL] == RSCH_PRIO_IDLE);
+
                 nrf_802154_priority_drop_hfclk_stop_terminate();
                 nrf_802154_clock_hfclk_start();
+
                 nrf_raal_continuous_mode_enter();
             }
+            else
+            {
+                // Intentionally empty
+            }
 
-            nrf_802154_wifi_coex_prio_request(new_prio);
-            prec_approved_prio_set(RSCH_PREC_COEX, new_prio);
+            nrf_802154_wifi_coex_prio_request(new_prio_mask);
         }
 
         mutex_unlock(&m_req_mutex);
     }
     while (monitor != m_req_mutex_monitor);
 
-    nrf_802154_log_exit(all_prec_update, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 }
 
 /** @brief Get currently approved priority level.
@@ -246,7 +253,7 @@ static inline void all_prec_update(void)
  */
 static inline rsch_prio_t approved_prio_lvl_get(void)
 {
-    nrf_802154_log_entry(approved_prio_lvl_get, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
     rsch_prio_t result = RSCH_PRIO_MAX;
 
@@ -258,7 +265,7 @@ static inline rsch_prio_t approved_prio_lvl_get(void)
         }
     }
 
-    nrf_802154_log_exit(approved_prio_lvl_get, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 
     return result;
 }
@@ -272,26 +279,33 @@ static inline rsch_prio_t approved_prio_lvl_get(void)
  */
 static inline bool requested_prio_lvl_is_at_least(rsch_prio_t prio)
 {
-    nrf_802154_log_entry(requested_prio_lvl_is_at_least, 2);
-    nrf_802154_log_exit(requested_prio_lvl_is_at_least, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
 
-    return m_requested_prio >= prio;
+    // The following line explicitly uses the fact that numeric values in the rsch_prio_t
+    // enumeration follow the actual value of the priority, i.e. higher value indicates
+    // higher priority, so a mask of priorities can be directly compared with a single priority.
+    return m_requested_prio_mask >= prio;
 }
 
 /** @brief Notify core if preconditions are approved or denied if current state differs from last reported.
+ *
+ * @retval true   Core was notified.
+ * @retval false  Otherwise.
  */
-static inline void notify_core(void)
+static inline bool notify_core(void)
 {
-    nrf_802154_log_entry(notify_core, 2);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_HIGH);
 
     rsch_prio_t approved_prio_lvl;
     uint8_t     temp_mon;
+    bool        notified = false;
 
     do
     {
         if (!mutex_trylock(&m_ntf_mutex, &m_ntf_mutex_monitor))
         {
-            return;
+            break;
         }
 
         /* It is possible that preemption is not detected (m_ntf_mutex_monitor is read after
@@ -307,13 +321,17 @@ static inline void notify_core(void)
             m_last_notified_prio = approved_prio_lvl;
 
             nrf_802154_rsch_continuous_prio_changed(approved_prio_lvl);
+
+            notified = true;
         }
 
         mutex_unlock(&m_ntf_mutex);
     }
     while (temp_mon != m_ntf_mutex_monitor);
 
-    nrf_802154_log_exit(notify_core, 2);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_HIGH);
+
+    return notified;
 }
 
 /** Timer callback used to trigger delayed timeslot.
@@ -322,19 +340,22 @@ static inline void notify_core(void)
  */
 static void delayed_timeslot_start(void * p_context)
 {
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
     rsch_dly_ts_id_t dly_ts_id = (rsch_dly_ts_id_t)(uint32_t)p_context;
     dly_ts_t       * p_dly_ts  = &m_dly_ts[dly_ts_id];
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RSCH_TIMER_DELAYED_START);
+    p_dly_ts->param.started_callback(dly_ts_id);
 
-    nrf_802154_rsch_delayed_timeslot_started(dly_ts_id);
+    // Drop preconditions immediately if precise timeslot type was selected
+    if (p_dly_ts->param.type == RSCH_DLY_TS_TYPE_PRECISE)
+    {
+        p_dly_ts->param.prio = RSCH_PRIO_IDLE;
+        all_prec_update();
+        notify_core();
+    }
 
-    p_dly_ts->prio = RSCH_PRIO_IDLE;
-
-    all_prec_update();
-    notify_core();
-
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RSCH_TIMER_DELAYED_START);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 /** Timer callback used to request preconditions for delayed timeslot.
@@ -343,21 +364,115 @@ static void delayed_timeslot_start(void * p_context)
  */
 static void delayed_timeslot_prec_request(void * p_context)
 {
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
     rsch_dly_ts_id_t dly_ts_id = (rsch_dly_ts_id_t)(uint32_t)p_context;
     dly_ts_t       * p_dly_ts  = &m_dly_ts[dly_ts_id];
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RSCH_TIMER_DELAYED_PREC);
-
     all_prec_update();
 
-    p_dly_ts->timer.t0        = p_dly_ts->t0;
-    p_dly_ts->timer.dt        = p_dly_ts->dt;
+    p_dly_ts->timer.t0        = p_dly_ts->param.t0;
+    p_dly_ts->timer.dt        = p_dly_ts->param.dt;
     p_dly_ts->timer.callback  = delayed_timeslot_start;
     p_dly_ts->timer.p_context = p_context;
 
     nrf_802154_timer_sched_add(&p_dly_ts->timer, true);
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RSCH_TIMER_DELAYED_PREC);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+}
+
+/**
+ * @brief Requests a @ref RSCH_DLY_TS_TYPE_PRECISE timeslot.
+ *
+ * @param[in]  p_dly_ts        ID of the requested timeslot.
+ * @param[in]  p_dly_ts_param  Parameters of the requested delayed timeslot.
+ *
+ * @retval true   Requested timeslot has been scheduled.
+ * @retval false  Requested timeslot cannot be scheduled and will not be granted.
+ */
+static bool precise_delayed_timeslot_request(dly_ts_t                  * p_dly_ts,
+                                             const rsch_dly_ts_param_t * p_param)
+{
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    // Assert that no operation is scheduled for the selected slot
+    assert(p_dly_ts->param.prio == RSCH_PRIO_IDLE);
+    assert(!nrf_802154_timer_sched_is_running(&p_dly_ts->timer));
+
+    uint32_t now    = nrf_802154_timer_sched_time_get();
+    uint32_t req_dt = p_param->dt - PREC_RAMP_UP_TIME;
+    bool     result = false;
+
+    if (nrf_802154_timer_sched_time_is_in_future(now, p_param->t0, req_dt))
+    {
+        // There is enough time for preconditions ramp-up no matter their current state.
+
+        p_dly_ts->param = *p_param;
+
+        p_dly_ts->timer.t0        = p_param->t0;
+        p_dly_ts->timer.dt        = req_dt;
+        p_dly_ts->timer.callback  = delayed_timeslot_prec_request;
+        p_dly_ts->timer.p_context = (void *)p_param->id;
+
+        nrf_802154_timer_sched_add(&p_dly_ts->timer, false);
+
+        result = true;
+    }
+    else if (requested_prio_lvl_is_at_least(RSCH_PRIO_IDLE_LISTENING) &&
+             nrf_802154_timer_sched_time_is_in_future(now, p_param->t0, p_param->dt))
+    {
+        // There is not enough time to perform full precondition ramp-up.
+        // Try with the currently approved preconditions
+
+        p_dly_ts->param = *p_param;
+
+        p_dly_ts->timer.t0        = p_param->t0;
+        p_dly_ts->timer.dt        = p_param->dt;
+        p_dly_ts->timer.callback  = delayed_timeslot_start;
+        p_dly_ts->timer.p_context = (void *)p_param->id;
+
+        all_prec_update();
+        nrf_802154_timer_sched_add(&p_dly_ts->timer, true);
+
+        result = true;
+    }
+    else
+    {
+        // The requested time is in the past.
+    }
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+
+    return result;
+}
+
+/**
+ * @brief Requests a @ref RSCH_DLY_TS_TYPE_RELAXED timeslot.
+ *
+ * @param[in]  p_dly_ts        ID of the requested timeslot.
+ * @param[in]  p_dly_ts_param  Parameters of the requested delayed timeslot.
+ *
+ * @return This function always returns true.
+ */
+static bool relaxed_delayed_timeslot_request(dly_ts_t                  * p_dly_ts,
+                                             const rsch_dly_ts_param_t * p_param)
+{
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    p_dly_ts->param = *p_param;
+
+    p_dly_ts->timer.t0        = p_param->t0;
+    p_dly_ts->timer.dt        = p_param->dt;
+    p_dly_ts->timer.callback  = delayed_timeslot_start;
+    p_dly_ts->timer.p_context = (void *)p_param->id;
+
+    all_prec_update();
+
+    nrf_802154_timer_sched_add(&p_dly_ts->timer, false);
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+
+    return true;
 }
 
 /***************************************************************************************************
@@ -367,23 +482,24 @@ static void delayed_timeslot_prec_request(void * p_context)
 void nrf_802154_rsch_init(void)
 {
     nrf_raal_init();
-    nrf_802154_wifi_coex_init();
 
-    m_ntf_mutex          = 0;
-    m_req_mutex          = 0;
-    m_last_notified_prio = RSCH_PRIO_IDLE;
-    m_cont_mode_prio     = RSCH_PRIO_IDLE;
-    m_requested_prio     = RSCH_PRIO_IDLE;
+    m_ntf_mutex           = 0;
+    m_req_mutex           = 0;
+    m_last_notified_prio  = RSCH_PRIO_IDLE;
+    m_cont_mode_prio      = RSCH_PRIO_IDLE;
+    m_requested_prio_mask = RSCH_PRIO_IDLE;
 
     for (uint32_t i = 0; i < RSCH_DLY_TS_NUM; i++)
     {
-        m_dly_ts[i].prio = RSCH_PRIO_IDLE;
+        m_dly_ts[i].param.prio = RSCH_PRIO_IDLE;
     }
 
     for (uint32_t i = 0; i < RSCH_PREC_CNT; i++)
     {
         m_approved_prios[i] = RSCH_PRIO_IDLE;
     }
+
+    nrf_802154_wifi_coex_init();
 }
 
 void nrf_802154_rsch_uninit(void)
@@ -399,8 +515,10 @@ void nrf_802154_rsch_uninit(void)
 
 void nrf_802154_rsch_continuous_mode_priority_set(rsch_prio_t prio)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, (prio > RSCH_PRIO_IDLE) ? FUNCTION_RSCH_CONTINUOUS_ENTER :
-                   FUNCTION_RSCH_CONTINUOUS_EXIT);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    nrf_802154_log_local_event(NRF_802154_LOG_VERBOSITY_LOW,
+                               NRF_802154_LOG_LOCAL_EVENT_ID_RSCH_PRIORITY_SET, (uint32_t)prio);
 
     m_cont_mode_prio = prio;
     __DMB();
@@ -408,8 +526,7 @@ void nrf_802154_rsch_continuous_mode_priority_set(rsch_prio_t prio)
     all_prec_update();
     notify_core();
 
-    nrf_802154_log(EVENT_TRACE_EXIT, (prio > RSCH_PRIO_IDLE) ? FUNCTION_RSCH_CONTINUOUS_ENTER :
-                   FUNCTION_RSCH_CONTINUOUS_EXIT);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void nrf_802154_rsch_continuous_ended(void)
@@ -422,70 +539,41 @@ bool nrf_802154_rsch_timeslot_request(uint32_t length_us)
     return nrf_raal_timeslot_request(length_us);
 }
 
-bool nrf_802154_rsch_delayed_timeslot_request(uint32_t         t0,
-                                              uint32_t         dt,
-                                              uint32_t         length,
-                                              rsch_prio_t      prio,
-                                              rsch_dly_ts_id_t dly_ts_id)
+bool nrf_802154_rsch_delayed_timeslot_request(const rsch_dly_ts_param_t * p_dly_ts_param)
 {
-    (void)length;
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RSCH_DELAYED_TIMESLOT_REQ);
-    assert(dly_ts_id < RSCH_DLY_TS_NUM);
+    assert(p_dly_ts_param->id < RSCH_DLY_TS_NUM);
+    assert(p_dly_ts_param->prio != RSCH_PRIO_IDLE);
 
-    dly_ts_t * p_dly_ts = &m_dly_ts[dly_ts_id];
-    uint32_t   now      = nrf_802154_timer_sched_time_get();
-    uint32_t   req_dt   = dt - PREC_RAMP_UP_TIME;
-    bool       result;
+    dly_ts_t * p_dly_ts = &m_dly_ts[p_dly_ts_param->id];
+    bool       result   = true;
 
-    assert(!nrf_802154_timer_sched_is_running(&p_dly_ts->timer));
-    assert(p_dly_ts->prio == RSCH_PRIO_IDLE);
-    assert(prio != RSCH_PRIO_IDLE);
-
-    if (nrf_802154_timer_sched_time_is_in_future(now, t0, req_dt))
+    switch (p_dly_ts_param->type)
     {
-        p_dly_ts->prio = prio;
-        p_dly_ts->t0   = t0;
-        p_dly_ts->dt   = dt;
+        case RSCH_DLY_TS_TYPE_PRECISE:
+            result = precise_delayed_timeslot_request(p_dly_ts, p_dly_ts_param);
+            break;
 
-        p_dly_ts->timer.t0        = t0;
-        p_dly_ts->timer.dt        = req_dt;
-        p_dly_ts->timer.callback  = delayed_timeslot_prec_request;
-        p_dly_ts->timer.p_context = (void *)dly_ts_id;
+        case RSCH_DLY_TS_TYPE_RELAXED:
+            result = relaxed_delayed_timeslot_request(p_dly_ts, p_dly_ts_param);
+            break;
 
-        nrf_802154_timer_sched_add(&p_dly_ts->timer, false);
-
-        result = true;
-    }
-    else if (requested_prio_lvl_is_at_least(RSCH_PRIO_MAX) &&
-             nrf_802154_timer_sched_time_is_in_future(now, t0, dt))
-    {
-        p_dly_ts->prio = prio;
-        p_dly_ts->t0   = t0;
-        p_dly_ts->dt   = dt;
-
-        p_dly_ts->timer.t0        = t0;
-        p_dly_ts->timer.dt        = dt;
-        p_dly_ts->timer.callback  = delayed_timeslot_start;
-        p_dly_ts->timer.p_context = (void *)dly_ts_id;
-
-        nrf_802154_timer_sched_add(&p_dly_ts->timer, true);
-
-        result = true;
-    }
-    else
-    {
-        result = false;
+        default:
+            result = false;
+            assert(false);
+            break;
     }
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RSCH_DELAYED_TIMESLOT_REQ);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 
     return result;
 }
 
 bool nrf_802154_rsch_delayed_timeslot_cancel(rsch_dly_ts_id_t dly_ts_id)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RSCH_DELAYED_TIMESLOT_CANCEL);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
     assert(dly_ts_id < RSCH_DLY_TS_NUM);
 
     bool       result   = false;
@@ -494,15 +582,49 @@ bool nrf_802154_rsch_delayed_timeslot_cancel(rsch_dly_ts_id_t dly_ts_id)
 
     nrf_802154_timer_sched_remove(&p_dly_ts->timer, &was_running);
 
-    p_dly_ts->prio = RSCH_PRIO_IDLE;
-    all_prec_update();
-    notify_core();
+    if (p_dly_ts->param.prio != RSCH_PRIO_IDLE)
+    {
+        p_dly_ts->param.prio = RSCH_PRIO_IDLE;
+        all_prec_update();
+        notify_core();
+    }
 
-    result = was_running;
+    switch (p_dly_ts->param.type)
+    {
+        case RSCH_DLY_TS_TYPE_PRECISE:
+            result = was_running;
+            break;
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RSCH_DELAYED_TIMESLOT_CANCEL);
+        case RSCH_DLY_TS_TYPE_RELAXED:
+            result = true;
+            break;
+
+        default:
+            assert(false);
+    }
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 
     return result;
+}
+
+bool nrf_802154_rsch_delayed_timeslot_priority_update(rsch_dly_ts_id_t dly_ts_id,
+                                                      rsch_prio_t      dly_ts_prio)
+{
+    assert(dly_ts_id < RSCH_DLY_TS_NUM);
+
+    dly_ts_t * p_dly_ts = &m_dly_ts[dly_ts_id];
+
+    // Do not modify inactive timeslot
+    if (p_dly_ts->param.prio == RSCH_PRIO_IDLE)
+    {
+        return false;
+    }
+    else
+    {
+        p_dly_ts->param.prio = dly_ts_prio;
+        return true;
+    }
 }
 
 bool nrf_802154_rsch_timeslot_is_requested(void)
@@ -536,26 +658,229 @@ uint32_t nrf_802154_rsch_timeslot_us_left_get(void)
 
 void nrf_raal_timeslot_started(void)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RSCH_TIMESLOT_STARTED);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     prec_approved_prio_set(RSCH_PREC_RAAL, RSCH_PRIO_MAX);
     notify_core();
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RSCH_TIMESLOT_STARTED);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void nrf_raal_timeslot_ended(void)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RSCH_TIMESLOT_ENDED);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     prec_approved_prio_set(RSCH_PREC_RAAL, RSCH_PRIO_IDLE);
-    notify_core();
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RSCH_TIMESLOT_ENDED);
+    // Ensure that RAAL can finish its processing even if core is not informed about it.
+    if (!notify_core())
+    {
+        nrf_802154_rsch_continuous_ended();
+    }
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void nrf_802154_clock_hfclk_ready(void)
 {
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
     prec_approved_prio_set(RSCH_PREC_HFCLK, RSCH_PRIO_MAX);
     notify_core();
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+}
+
+void nrf_802154_wifi_coex_granted(nrf_802154_wifi_coex_request_state_t curr_request_state)
+{
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    if (curr_request_state != WIFI_COEX_REQUEST_STATE_NO_REQUEST)
+    {
+        uint32_t now = nrf_802154_timer_sched_time_get();
+        nrf_802154_stat_timestamp_write(last_coex_grant_timestamp, now);
+        nrf_802154_stat_timestamp_write(last_coex_grant_valid, true);    
+    }
+
+    prec_approved_prio_set(RSCH_PREC_COEX, RSCH_PRIO_MAX);
+    // TODO: make conditional on CONFIG/PRIORITY pin: tx/rx granted
+    notify_core();
+
+    if (curr_request_state == WIFI_COEX_REQUEST_STATE_NO_REQUEST)
+    {
+        nrf_802154_stat_counter_increment(coex_unsolicited_grants);
+    }
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+}
+
+void nrf_802154_wifi_coex_denied(nrf_802154_wifi_coex_request_state_t curr_request_state)
+{
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    prec_approved_prio_set(RSCH_PREC_COEX, RSCH_PRIO_RX);
+    notify_core();
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+}
+
+void nrf_802154_wifi_coex_request_changed(
+    nrf_802154_wifi_coex_request_state_t curr_request_state,
+    nrf_802154_wifi_coex_request_state_t prev_request_state,
+    bool                                 grant_state)
+{
+    uint32_t now = nrf_802154_timer_sched_time_get();
+    
+    switch (prev_request_state)
+    {
+        case WIFI_COEX_REQUEST_STATE_NO_REQUEST:
+        {
+            nrf_802154_stat_timestamp_write(last_coex_request_timestamp, now);
+
+            // In case grant is already active when request is set, immediately update grant timestamps.
+            if (grant_state)
+            {
+                nrf_802154_stat_timestamp_write(last_coex_grant_timestamp, now);
+                nrf_802154_stat_timestamp_write(last_coex_grant_valid, true);
+            }
+            else
+            {
+                nrf_802154_stat_timestamp_write(last_coex_grant_valid, false);
+            }
+
+            break;
+        }
+
+        case WIFI_COEX_REQUEST_STATE_RX:
+            if (grant_state)
+            {
+                nrf_802154_stat_counter_increment(coex_granted_rx_requests);
+                
+                if (curr_request_state == WIFI_COEX_REQUEST_STATE_TX)
+                {
+                    nrf_802154_coex_rx_granted();
+                    nrf_802154_stat_timestamp_write(last_coex_request_timestamp, now);
+                    nrf_802154_stat_timestamp_write(last_coex_grant_timestamp, now);
+                    nrf_802154_stat_timestamp_write(last_coex_grant_valid, true);
+                }
+                else if (curr_request_state == WIFI_COEX_REQUEST_STATE_NO_REQUEST)
+                {
+                    nrf_802154_coex_rx_granted();
+                }
+                else 
+                {
+                    // The function should only be called when request changes - rx to rx transition should be impossible here.
+                    assert(false); 
+                }
+            }
+            else
+            {
+                nrf_802154_stat_counter_increment(coex_denied_rx_requests);
+
+                if (curr_request_state == WIFI_COEX_REQUEST_STATE_TX)
+                {
+                    nrf_802154_coex_rx_denied();
+                    nrf_802154_stat_timestamp_write(last_coex_request_timestamp, now);
+                    nrf_802154_stat_timestamp_write(last_coex_grant_valid, false);
+                }
+                else if (curr_request_state == WIFI_COEX_REQUEST_STATE_NO_REQUEST)
+                {
+                    nrf_802154_coex_rx_denied();
+                }
+                else 
+                {
+                    // The function should only be called when request changes - tx to tx transition should be impossible here.
+                    assert(false); 
+                }
+            }
+
+            break;
+
+        case WIFI_COEX_REQUEST_STATE_TX:
+            if (grant_state)
+            {
+                nrf_802154_stat_counter_increment(coex_granted_tx_requests);
+                
+                if (curr_request_state == WIFI_COEX_REQUEST_STATE_RX)
+                {
+                    nrf_802154_coex_tx_granted();
+                    nrf_802154_stat_timestamp_write(last_coex_request_timestamp, now);
+                    nrf_802154_stat_timestamp_write(last_coex_grant_timestamp, now);
+                    nrf_802154_stat_timestamp_write(last_coex_grant_valid, true);
+                }
+                else if (curr_request_state == WIFI_COEX_REQUEST_STATE_NO_REQUEST)
+                {
+                    nrf_802154_coex_tx_granted();
+                }
+                else 
+                {
+                    // The function should only be called when request changes - tx to tx transition should be impossible here.
+                    assert(false); 
+                }
+            }
+            else
+            {
+                nrf_802154_stat_counter_increment(coex_denied_tx_requests);
+
+                if (curr_request_state == WIFI_COEX_REQUEST_STATE_RX)
+                {
+                    nrf_802154_coex_tx_denied();
+                    nrf_802154_stat_timestamp_write(last_coex_request_timestamp, now);
+                    nrf_802154_stat_timestamp_write(last_coex_grant_valid, false);
+                }
+                else if (curr_request_state == WIFI_COEX_REQUEST_STATE_NO_REQUEST)
+                {
+                    nrf_802154_coex_tx_denied();
+                }
+                else 
+                {
+                    // The function should only be called when request changes - tx to tx transition should be impossible here.
+                    assert(false); 
+                }
+            }
+
+            break;
+
+        default:
+            assert(false);
+            break;
+    }
+
+    switch (curr_request_state)
+    {
+        case WIFI_COEX_REQUEST_STATE_RX:
+            nrf_802154_stat_counter_increment(coex_rx_requests);
+            break;
+
+        case WIFI_COEX_REQUEST_STATE_TX:
+            nrf_802154_stat_counter_increment(coex_tx_requests);
+            break;
+
+        default:
+            break;
+    }
+}
+
+__WEAK void nrf_802154_coex_rx_granted(void)
+{
+    // Intentionally empty
+    return;
+}
+
+__WEAK void nrf_802154_coex_tx_granted(void)
+{
+    // Intentionally empty
+    return;
+}
+
+__WEAK void nrf_802154_coex_rx_denied(void)
+{
+    // Intentionally empty
+    return;
+}
+
+__WEAK void nrf_802154_coex_tx_denied(void)
+{
+    // Intentionally empty
+    return;
 }

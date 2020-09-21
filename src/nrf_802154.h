@@ -525,6 +525,20 @@ bool nrf_802154_cca(void);
 bool nrf_802154_continuous_carrier(void);
 
 /**
+ * @brief Changes the radio state to modulated carrier.
+ *
+ * @note When the radio is emitting modulated carrier signals, it blocks all transmissions on the
+ *       selected channel. This function is to be called only during radio tests. Do not
+ *       use it during normal device operation.
+ *
+ * @param[in] p_data Pointer to a buffer to modulate the carrier with.
+ *
+ * @retval  true   The modulated carrier procedure was scheduled.
+ * @retval  false  The driver could not schedule the modulated carrier procedure.
+ */
+bool nrf_802154_modulated_carrier(const uint8_t * p_data);
+
+/**
  * @}
  * @defgroup nrf_802154_calls Calls to higher layer
  * @{
@@ -1214,6 +1228,57 @@ void nrf_802154_transmit_csma_ca_raw(const uint8_t * p_data);
 void nrf_802154_transmit_csma_ca(const uint8_t * p_data, uint8_t length);
 
 #endif // NRF_802154_USE_RAW_API
+
+/**
+ * @brief Sets the minimum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @param[in] min_be  Minimum value of the backoff exponent.
+ *
+ * @retval true   When value provided by @p min_be has been set successfully.
+ * @retval false  Otherwise.
+ */
+bool nrf_802154_csma_ca_min_be_set(uint8_t min_be);
+
+/**
+ * @brief Gets the minimum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @return Current minimum value of the backoff exponent.
+ */
+uint8_t nrf_802154_csma_ca_min_be_get(void);
+
+/**
+ * @brief Sets the maximum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @param[in] max_be  Maximum value of the backoff exponent.
+ *
+ * @retval true   When value provided by @p max_be has been set successfully.
+ * @retval false  Otherwise.
+ */
+bool nrf_802154_csma_ca_max_be_set(uint8_t max_be);
+
+/**
+ * @brief Gets the maximum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @return Current maximum value of the backoff exponent.
+ */
+uint8_t nrf_802154_csma_ca_max_be_get(void);
+
+/**
+ * @brief Sets the maximum number of backoffs the CSMA-CA algorithm will attempt before declaring
+ *        a channel access failure.
+ *
+ * @param[in] max_backoffs  Maximum number of backoffs.
+ */
+void nrf_802154_csma_ca_max_backoffs_set(uint8_t max_backoffs);
+
+/**
+ * @brief Gets the maximum number of backoffs the CSMA-CA algorithm will attempt before declaring
+ *        a channel access failure.
+ *
+ * @return Current maximum number of backoffs.
+ */
+uint8_t nrf_802154_csma_ca_max_backoffs_get(void);
+
 #endif // NRF_802154_CSMA_CA_ENABLED
 
 /**
@@ -1234,6 +1299,224 @@ void nrf_802154_transmit_csma_ca(const uint8_t * p_data, uint8_t length);
 void nrf_802154_ack_timeout_set(uint32_t time);
 
 #endif // NRF_802154_ACK_TIMEOUT_ENABLED
+
+/**
+ * @}
+ * @defgroup nrf_802154_tx_timeout Transmission timeout procedure
+ * @{
+ */
+
+/**
+ * @brief Sets the transmission timeout.
+ * 
+ * When CSMA-CA procedure or a frame transmission last for the time specified by this value,
+ * it is stopped and higher layer is notified of failure with @ref NRF_802154_TX_ERROR_TIMEOUT
+ * return code.
+
+ * @note Setting this value to 0 disables the timeout.
+ * 
+ * @param[in] timeout_us  Transmission timeout in microseconds.
+ */
+void nrf_802154_tx_timeout_set(uint32_t timeout_us);
+
+/**
+ * @brief Gets the transmission timeout.
+ * 
+ * @note Return value equal 0 indicates that timeout is disabled.
+ * 
+ * @return Current transmission timeout in microseconds.
+ */
+uint32_t nrf_802154_tx_timeout_get(void);
+
+/**
+ * @}
+ * @defgroup nrf_802154_coex Wifi Coex feature
+ * @{
+ */
+
+/**
+ * @brief Enables wifi coex signaling.
+ *
+ * When @ref nrf_802154_init is called, the wifi coex signaling is initially enabled or disabled
+ * depending on @ref NRF_802154_COEX_INITIALLY_ENABLED. You can call this function
+ * (after @ref nrf_802154_init) to enable the wifi coex signaling. When wifi coex signaling
+ * has been already enabled, this function has no effect.
+ *
+ * When this function is called during receive or transmit operation, the effect on coex interface
+ * may be delayed until current frame (or ack) is received or transmitted.
+ * To avoid this issue please call this function when the driver is in sleep mode.
+ *
+ * @retval true     Wifi coex is supported and is enabled after call to this function.
+ * @retval false    Wifi coex is not supported.
+ */
+bool nrf_802154_wifi_coex_enable(void);
+
+/**
+ * @brief Disables wifi coex signaling.
+ *
+ * You can call this function (after @ref nrf_802154_init) to disable the wifi coex signaling.
+ * When wifi coex signaling has been already disabled, this function has no effect.
+ *
+ * When this function is called during receive or transmit operation, the effect on coex interface
+ * may be delayed until current frame (or ack) is received or transmitted.
+ * To avoid this issue please call this function when the driver is in sleep mode.
+ */
+void nrf_802154_wifi_coex_disable(void);
+
+/**
+ * @brief Checks if wifi coex signaling is enabled.
+ *
+ * @retval true     Wifi coex signaling is enabled.
+ * @retval false    Wifi coex signaling is disabled.
+ */
+bool nrf_802154_wifi_coex_is_enabled(void);
+
+/**
+ * @brief Sets Coex request mode used in receive operations.
+ *
+ * @param[in] mode  Coex receive request mode. For allowed values see @ref nrf_802154_coex_rx_request_mode_t type.
+ *
+ * @retval true     Operation succeeded.
+ * @retval false    Requested mode is not supported.
+ */
+bool nrf_802154_coex_rx_request_mode_set(nrf_802154_coex_rx_request_mode_t mode);
+
+/**
+ * @brief Gets Coex request mode used in receive operations.
+ *
+ * @return Current Coex receive request mode. For allowed values see @ref nrf_802154_coex_rx_request_mode_t type.
+ */
+nrf_802154_coex_rx_request_mode_t nrf_802154_coex_rx_request_mode_get(void);
+
+/**
+ * @brief Sets Coex request mode used in transmit operations.
+ *
+ * @param[in] mode  Coex transmit request mode. For allowed values see @ref nrf_802154_coex_tx_request_mode_t type.
+ *
+ * @retval true     Operation succeeded.
+ * @retval false    Requested mode is not supported.
+ */
+bool nrf_802154_coex_tx_request_mode_set(nrf_802154_coex_tx_request_mode_t mode);
+
+/**
+ * @brief Gets Coex request mode used in transmit operations.
+ *
+ * @return Current Coex transmit request mode. For allowed values see @ref nrf_802154_coex_tx_request_mode_t type.
+ */
+nrf_802154_coex_tx_request_mode_t nrf_802154_coex_tx_request_mode_get(void);
+
+/**
+ * @}
+ * @defgroup nrf_802154_stats Statistics and measurements.
+ * @{
+ */
+
+/**
+ * @brief Gets current statistics.
+ *
+ * @param[out] p_stats    Structure that will be filled with current stats values.
+ */
+void nrf_802154_stats_get(nrf_802154_stats_t * p_stats);
+
+/**
+ * @brief Get current statistics.
+ *
+ * @note This returns part of information returned by @ref nrf_802154_stats_get
+ *
+ * @param[out] p_stat_counters    Structure that will be filled with current stats counter values.
+ */
+void nrf_802154_stat_counters_get(nrf_802154_stat_counters_t * p_stat_counters);
+
+/**
+ * @brief Decreases current statistic counter values by the provided ones.
+ *
+ * This function is intended to be called together with @ref nrf_802154_stats_get
+ * to avoid missing any counted events.
+ *
+ * @param[in] p_stat_counters Current stat counter values will be decreased by values provided
+ *                            behind this pointer.
+ */
+void nrf_802154_stat_counters_subtract(const nrf_802154_stat_counters_t * p_stat_counters);
+
+/**
+ * @brief Get time stamps of events gathered by the last operation.
+ *
+ * @param[out] p_stat_timestamps Structure that will be filled with current time stamps of events.
+ */
+void nrf_802154_stat_timestamps_get(nrf_802154_stat_timestamps_t * p_stat_timestamps);
+
+/**
+ * @brief Resets current stat counters to 0.
+ *
+ * @note @ref nrf_802154_stat_counters_get and @ref nrf_802154_stat_counters_reset may lead to
+ * missing events if an counted event occurs between these calls. Use
+ * @ref nrf_802154_stat_counters_subtract to avoid such condition if necessary.
+ */
+void nrf_802154_stat_counters_reset(void);
+
+/**
+ * @brief Get total times spent in certain states.
+ *
+ * @param[out] p_stat_totals Structure that will be filled with times spent in certain states
+ *                           until now.
+ */
+void nrf_802154_stat_totals_get(nrf_802154_stat_totals_t * p_stat_totals);
+
+/** @} */
+
+/**
+ * @}
+ * @defgroup nrf_802154_ifs Inter-frame spacing feature.
+ * @{
+ */
+#if NRF_802154_IFS_ENABLED
+
+/**
+ * @brief Gets IFS operation mode.
+ *
+ * @return Current IFS operation mode. Refer to @ref nrf_802154_ifs_mode_t for details.
+ */
+nrf_802154_ifs_mode_t nrf_802154_ifs_mode_get(void);
+
+/**
+ * @brief Sets IFS operation mode.
+ *
+ * @param[in] mode  IFS operation mode. Refer to @ref nrf_802154_ifs_mode_t for details.
+ *
+ * @retval    true  The update of IFS operation mode was successful.
+ * @retval    false The update of IFS operation mode failed. Provided mode is unsupported
+ */
+bool nrf_802154_ifs_mode_set(nrf_802154_ifs_mode_t mode);
+
+/**
+ * @brief Gets Short IFS period in microseconds.
+ *
+ * @return Current Short IFS period in microseconds.
+ */
+uint16_t nrf_802154_ifs_min_sifs_period_get(void);
+
+/**
+ * @brief Sets Short IFS period in microseconds.
+ *
+ * @param[in] period Short IFS period in microseconds.
+ */
+void nrf_802154_ifs_min_sifs_period_set(uint16_t period);
+
+/**
+ * @brief Gets Long IFS period in microseconds.
+ *
+ * @return Current Long IFS period in microseconds.
+ */
+uint16_t nrf_802154_ifs_min_lifs_period_get(void);
+
+/**
+ * @brief Sets Long IFS period in microseconds.
+ *
+ * @param[in] period Long IFS period in microseconds.
+ */
+void nrf_802154_ifs_min_lifs_period_set(uint16_t period);
+
+#endif // NRF_802154_IFS_ENABLED
 
 /** @} */
 

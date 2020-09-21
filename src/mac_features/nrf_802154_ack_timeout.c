@@ -34,6 +34,8 @@
  *
  */
 
+#define NRF_802154_MODULE_ID NRF_802154_MODULE_ID_ACK_TIMEOUT
+
 #include "nrf_802154_ack_timeout.h"
 
 #include <assert.h>
@@ -65,7 +67,7 @@ static void notify_tx_error(bool result)
 
 static void timeout_timer_fired(void * p_context)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_ACK_TIMEOUT_FIRED);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     (void)p_context;
 
@@ -84,7 +86,7 @@ static void timeout_timer_fired(void * p_context)
         }
     }
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_ACK_TIMEOUT_FIRED);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 static void timeout_timer_retry(void)

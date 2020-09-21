@@ -140,3 +140,8 @@ uint32_t nrf_802154_hp_timer_timestamp_get(void)
 {
     return nrf_timer_cc_read(TIMER, TIMER_CC_EVT);
 }
+
+uint32_t nrf_802154_hp_timer_current_time_get(void)
+{
+    return timer_time_get();
+}

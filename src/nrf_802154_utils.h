@@ -34,6 +34,8 @@
 #include <assert.h>
 #include <stdint.h>
 #include "nrf.h"
+#include <nrfx.h>
+#include <soc/nrfx_coredep.h>
 
 /**
  * @defgroup nrf_802154_utils Utils definitions used in the 802.15.4 driver
@@ -75,6 +77,56 @@
 
 /**@brief Wait procedure used in a busy loop. */
 #define nrf_802154_busy_wait() __WFE()
+
+/**@brief Active waiting for given number of microseconds.
+ *
+ * It is guaranteed that execution of this macro will take at least @c time_in_us
+ * number of microseconds.
+ */
+#define nrf_802154_delay_us(time_in_us) nrfx_coredep_delay_us(time_in_us)
+
+/**@brief Type holding MCU critical section state.
+ *
+ * Variable of this type is required to hold state saved by @ref nrf_802154_mcu_critical_enter
+ * and restored by @ref nrf_802154_mcu_critical_exit.
+ */
+typedef uint32_t nrf_802154_mcu_critical_state_t;
+
+/**@brief Enters critical section on MCU level.
+ *
+ * Use @ref nrf_802154_mcu_critical_exit complementary. Consider following code:
+ * @code
+ * nrf_802154_mcu_critical_state_t mcu_cs;
+ * nrf_802154_mcu_critical_enter(mcu_cs);
+ * // do your critical stuff as fast as possible
+ * nrf_802154_mcu_critical_exit(mcu_cs);
+ * @endcode
+ *
+ * @param mcu_critical_state    Variable of @ref nrf_802154_mcu_critical_state_t where current
+ *                              state of MCU level critical section will be stored.
+ */
+#define nrf_802154_mcu_critical_enter(mcu_critical_state) \
+    do                                                    \
+    {                                                     \
+        (mcu_critical_state) = __get_PRIMASK();           \
+        __disable_irq();                                  \
+    }                                                     \
+    while (0)
+
+/**@brief Exits critical section on MCU level.
+ *
+ * This shall be used complementary to @ref nrf_802154_mcu_critical_enter.
+ *
+ * @param mcu_critical_state    Variable of @ref nrf_802154_mcu_critical_state_t where
+ *                              state of MCU level critical section is stored by
+ *                              former call to @ref nrf_802154_mcu_critical_enter
+ */
+#define nrf_802154_mcu_critical_exit(mcu_critical_state) \
+    do                                                   \
+    {                                                    \
+        __set_PRIMASK(mcu_critical_state);               \
+    }                                                    \
+    while (0)
 
 static inline uint64_t NRF_802154_US_TO_RTC_TICKS(uint64_t time)
 {

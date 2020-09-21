@@ -78,6 +78,21 @@ void nrf_802154_csma_ca_start(const uint8_t * p_data);
 bool nrf_802154_csma_ca_abort(nrf_802154_term_t term_lvl, req_originator_t req_orig);
 
 /**
+ * @brief Handles a pre-transmission event.
+ *
+ * @param[in]  p_frame          Pointer to the buffer that contains the PHR and PSDU of the transmitted frame.
+ * @param[in]  cca              Whether to trigger CCA before transmitting the frame.
+ * @param[in]  notify_function  Pointer to function that notifies about the failure of the operation
+ *                              started by the hook (if any).
+ *
+ * @retval  true   Frame is going to be transmitted immediately.
+ * @retval  false  Frame is going to be handled by CSMA-CA.
+ */
+bool nrf_802154_csma_ca_pretransmission(const uint8_t                     * p_frame,
+                                        bool                                cca,
+                                        nrf_802154_transmit_failed_notify_t notify_function);
+
+/**
  * @brief Handles a TX failed event.
  *
  * @param[in]  p_frame  Pointer to a buffer that contains PHR and PSDU of the frame
@@ -102,6 +117,13 @@ bool nrf_802154_csma_ca_tx_failed_hook(const uint8_t * p_frame, nrf_802154_tx_er
  */
 bool nrf_802154_csma_ca_tx_started_hook(const uint8_t * p_frame);
 
+/**
+ * @brief Handles change of preconditions' approved priority level.
+ * 
+ * @param[in]  old_prio  Previously approved priority level.
+ * @param[in]  new_prio  Currently approved priority level.
+ */
+void nrf_802154_csma_ca_prio_changed_hook(uint32_t old_prio, uint32_t new_prio);
 /**
  *@}
  **/

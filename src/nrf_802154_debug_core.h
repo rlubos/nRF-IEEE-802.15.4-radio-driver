@@ -42,20 +42,15 @@
 extern "C" {
 #endif
 
-#define NRF_802154_DEBUG_LOG_BUFFER_LEN 1024
+#define PIN_DBG_TIMESLOT_ACTIVE       3
+#define PIN_DBG_TIMESLOT_EXTEND_REQ   4
+#define PIN_DBG_TIMESLOT_SESSION_IDLE 16
+#define PIN_DBG_TIMESLOT_RADIO_IRQ    28
+#define PIN_DBG_TIMESLOT_FAILED       29
+#define PIN_DBG_TIMESLOT_BLOCKED      30
+#define PIN_DBG_RAAL_CRITICAL_SECTION 15
 
-#define EVENT_TRACE_ENTER               0x0001UL
-#define EVENT_TRACE_EXIT                0x0002UL
-
-#define PIN_DBG_TIMESLOT_ACTIVE         3
-#define PIN_DBG_TIMESLOT_EXTEND_REQ     4
-#define PIN_DBG_TIMESLOT_SESSION_IDLE   16
-#define PIN_DBG_TIMESLOT_RADIO_IRQ      28
-#define PIN_DBG_TIMESLOT_FAILED         29
-#define PIN_DBG_TIMESLOT_BLOCKED        30
-#define PIN_DBG_RAAL_CRITICAL_SECTION   15
-
-#define PIN_DBG_RTC0_EVT_REM            31
+#define PIN_DBG_RTC0_EVT_REM          31
 
 #if ENABLE_DEBUG_GPIO
 
@@ -70,59 +65,6 @@ extern "C" {
 #else // ENABLE_DEBUG_GPIO
 
 #define NRF_802154_DEBUG_CORE_PINS_USED 0
-
-#endif
-
-#ifndef DEBUG_VERBOSITY
-#define DEBUG_VERBOSITY 1
-#endif
-
-#ifndef CU_TEST
-#if ENABLE_DEBUG_LOG
-extern volatile uint32_t nrf_802154_debug_log_buffer[
-    NRF_802154_DEBUG_LOG_BUFFER_LEN];
-extern volatile uint32_t nrf_802154_debug_log_ptr;
-
-#define nrf_802154_log(EVENT_CODE, EVENT_ARG)                                    \
-    do                                                                           \
-    {                                                                            \
-        uint32_t ptr = nrf_802154_debug_log_ptr;                                 \
-                                                                                 \
-        nrf_802154_debug_log_buffer[ptr] = ((EVENT_CODE) | ((EVENT_ARG) << 16)); \
-        nrf_802154_debug_log_ptr         =                                       \
-            ptr < (NRF_802154_DEBUG_LOG_BUFFER_LEN - 1) ? ptr + 1 : 0;           \
-    }                                                                            \
-    while (0)
-
-#else // ENABLE_DEBUG_LOG
-
-#define nrf_802154_log(EVENT_CODE, EVENT_ARG) (void)(EVENT_ARG)
-
-#endif // ENABLE_DEBUG_LOG
-
-#define nrf_802154_log_entry(function, verbosity)                     \
-    do                                                                \
-    {                                                                 \
-        if (verbosity <= DEBUG_VERBOSITY)                             \
-        {                                                             \
-            nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_ ## function); \
-        }                                                             \
-    }                                                                 \
-    while (0)
-
-#define nrf_802154_log_exit(function, verbosity)                     \
-    do                                                               \
-    {                                                                \
-        if (verbosity <= DEBUG_VERBOSITY)                            \
-        {                                                            \
-            nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_ ## function); \
-        }                                                            \
-    }                                                                \
-    while (0)
-
-#else // CU_TEST
-
-#define nrf_802154_log(EVENT_CODE, EVENT_ARG)
 
 #endif
 
@@ -147,11 +89,6 @@ extern volatile uint32_t nrf_802154_debug_log_ptr;
 #define nrf_802154_pin_tgl(pin)
 
 #endif // ENABLE_DEBUG_GPIO
-
-/**
- * @brief Initializes debug helpers for the nRF 802.15.4 driver.
- */
-void nrf_802154_debug_init(void);
 
 #ifdef __cplusplus
 }

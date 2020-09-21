@@ -34,6 +34,8 @@
  *
  */
 
+#define NRF_802154_MODULE_ID NRF_802154_MODULE_ID_ACK_TIMEOUT
+
 #include "nrf_802154_ack_timeout.h"
 
 #include <assert.h>
@@ -45,6 +47,8 @@
 #include "nrf_802154_procedures_duration.h"
 #include "nrf_802154_request.h"
 #include "timer_scheduler/nrf_802154_timer_sched.h"
+
+#if NRF_802154_ACK_TIMEOUT_ENABLED
 
 #define RETRY_DELAY     500     ///< Procedure is delayed by this time if it cannot be performed at the moment [us].
 #define MAX_RETRY_DELAY 1000000 ///< Maximum allowed delay of procedure retry [us].
@@ -66,7 +70,7 @@ static void notify_tx_error(bool result)
 
 static void timeout_timer_fired(void * p_context)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_ACK_TIMEOUT_FIRED);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     (void)p_context;
 
@@ -85,7 +89,7 @@ static void timeout_timer_fired(void * p_context)
         }
     }
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_ACK_TIMEOUT_FIRED);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 static void timeout_timer_retry(void)
@@ -181,3 +185,5 @@ bool nrf_802154_ack_timeout_tx_failed_hook(const uint8_t * p_frame, nrf_802154_t
 
     return true;
 }
+
+#endif // NRF_802154_ACK_TIMEOUT_ENABLED

@@ -134,6 +134,17 @@ bool nrf_802154_request_cca(nrf_802154_term_t term_lvl);
 bool nrf_802154_request_continuous_carrier(nrf_802154_term_t term_lvl);
 
 /**
+ * @brief Requests entering the @ref RADIO_STATE_MODULATED_CARRIER state.
+ *
+ * @param[in]  term_lvl  Termination level of this request. Selects procedures to abort.
+ *
+ * @retval  true   The driver will enter the modulated carrier state.
+ * @retval  false  The driver cannot enter the modulated carrier state due to an ongoing operation.
+ */
+bool nrf_802154_request_modulated_carrier(nrf_802154_term_t term_lvl,
+                                          const uint8_t   * p_data);
+
+/**
  * @brief Requests the driver to free the given buffer.
  *
  * @param[in]  p_data  Pointer to the buffer to be freed.

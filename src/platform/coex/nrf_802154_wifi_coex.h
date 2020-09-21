@@ -36,6 +36,9 @@
 #ifndef NRF_802154_WIFI_COEX_H_
 #define NRF_802154_WIFI_COEX_H_
 
+#include <stdbool.h>
+
+#include "nrf_802154_config.h"
 #include "rsch/nrf_802154_rsch.h"
 
 #ifdef __cplusplus
@@ -51,6 +54,17 @@ extern "C" {
  * The Wi-Fi Coexistence module is a client of the PTA (defined in the 802.15.2). It manages GPIO
  * to assert pins and respond to pin state changes.
  */
+
+/**@brief Enumeration representing state of request to PTA */
+typedef enum
+{
+    /** @brief No request is being made to PTA. */
+    WIFI_COEX_REQUEST_STATE_NO_REQUEST = 0,
+    /** @brief Requesting receive mode to PTA. */
+    WIFI_COEX_REQUEST_STATE_RX,
+    /** @brief Requesting transmit mode to PTA. */
+    WIFI_COEX_REQUEST_STATE_TX
+} nrf_802154_wifi_coex_request_state_t;
 
 /**
  * @brief Initializes the Wi-Fi Coexistence module.
@@ -72,10 +86,10 @@ void nrf_802154_wifi_coex_uninit(void);
  * @note The approval of the requested priority is notified asynchronously by the
  *       @ref nrf_802154_wifi_coex_prio_changed call.
  *
- * @param[in]  priority  The requested priority level.
+ * @param[in]  priority_mask  Mask of requested priority levels.
  *
  */
-void nrf_802154_wifi_coex_prio_request(rsch_prio_t priority);
+void nrf_802154_wifi_coex_prio_request(rsch_prio_mask_t priority_mask);
 
 /**
  * @brief Gets the priority denial event address.
@@ -97,6 +111,74 @@ void * nrf_802154_wifi_coex_deny_event_addr_get(void);
  */
 extern void nrf_802154_wifi_coex_prio_changed(rsch_prio_t priority);
 
+/**
+ * @brief Notifies about any change of request signaled to PTA.
+ *
+ * This function may be called from an ISR in consequence of call to @ref nrf_802154_wifi_coex_prio_request
+ * or from inside of the @ref nrf_802154_wifi_coex_prio_request function.
+ * This function is called on changes of request signal only. After @ref nrf_802154_wifi_coex_init
+ * no request is signaled to PTA so @ref WIFI_COEX_REQUEST_STATE_NO_REQUEST value is assumed as
+ * request_state value. @ref nrf_802154_wifi_coex_init does not call the
+ * @ref nrf_802154_wifi_coex_request_changed.
+ *
+ * @param[in] curr_request_state    Current request signaled to PTA.
+ * @param[in] prev_request_state    Previous request signaled to PTA.
+ * @param[in] grant_state           State of grant signal just before change to request signal was made.
+ */
+extern void nrf_802154_wifi_coex_request_changed(
+    nrf_802154_wifi_coex_request_state_t curr_request_state,
+    nrf_802154_wifi_coex_request_state_t prev_request_state,
+    bool                                 grant_state);
+
+/**
+ * @brief Notifies that access to the medium was granted by the PTA.
+ *
+ * @param[in] curr_request_state    Current request signaled to PTA.
+ */
+extern void nrf_802154_wifi_coex_granted(nrf_802154_wifi_coex_request_state_t curr_request_state);
+
+/**
+ * @brief Notifies that access to the medium was denied by the PTA.
+ *
+ * @param[in] curr_request_state    Current request signaled to PTA.
+ */
+extern void nrf_802154_wifi_coex_denied(nrf_802154_wifi_coex_request_state_t curr_request_state);
+
+/**
+ * @brief Notifies that access to medium was granted for reception.
+ * 
+ * As this function is called after grant has been granted for the entirety of request duration,
+ * coex request and grant timestamps can be read here, providing statistics immediately after 
+ * request ends. 
+ */
+extern void nrf_802154_coex_rx_granted(void);
+
+/**
+ * @brief Notifies that access to medium was granted for transmission.
+ * 
+ * As this function is called after grant has been granted for the entirety of request duration,
+ * coex request and grant timestamps can be read here, providing statistics immediately after 
+ * request ends.
+ */
+extern void nrf_802154_coex_tx_granted(void);
+
+/**
+ * @brief Notifies that access to medium was denied for reception.
+ * 
+ * As this function is called after request is deasserted but not granted,
+ * coex request and grant timestamps can be read here, providing statistics immediately after 
+ * request ends. 
+ */
+extern void nrf_802154_coex_rx_denied(void);
+
+/**
+ * @brief Notifies that access to medium was denied for transmission.
+ * 
+ * As this function is called after request is deasserted but not granted,
+ * coex request and grant timestamps can be read here, providing statistics immediately after 
+ * request ends.
+ */
+extern void nrf_802154_coex_tx_denied(void);
 /**
  *@}
  **/

@@ -29,46 +29,25 @@
  */
 
 /**
- * @brief Module that contains debug helpers for the 802.15.4 radio driver for the nRF SoC devices.
+ * @file
+ *   This file implements debug log helpers for the nRF 802.15.4 radio driver.
  *
  */
 
-#ifndef NRF_802154_DEBUG_H_
-#define NRF_802154_DEBUG_H_
-
+#include <assert.h>
 #include <stdint.h>
 
-#include "nrf_802154_debug_core.h"
+#include "nrf_802154_debug_log.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/// Buffer used to store debug log messages.
+volatile uint32_t nrf_802154_debug_log_buffer[NRF_802154_DEBUG_LOG_BUFFER_LEN];
 
-#define EVENT_TIMESLOT_REQUEST        0x0007UL
-#define EVENT_TIMESLOT_REQUEST_RESULT 0x0008UL
+/// Index of the log buffer pointing to the element that should be filled with next log message.
+volatile uint32_t nrf_802154_debug_log_ptr = 0;
 
-/* Reserved for RAAL: 0x0300 - 0x047F */
-
-#define FUNCTION_RAAL_CRIT_SECT_ENTER          0x0301UL
-#define FUNCTION_RAAL_CRIT_SECT_EXIT           0x0302UL
-#define FUNCTION_RAAL_CONTINUOUS_ENTER         0x0303UL
-#define FUNCTION_RAAL_CONTINUOUS_EXIT          0x0304UL
-
-#define FUNCTION_RAAL_SIG_HANDLER              0x0400UL
-#define FUNCTION_RAAL_SIG_EVENT_START          0x0401UL
-#define FUNCTION_RAAL_SIG_EVENT_MARGIN         0x0402UL
-#define FUNCTION_RAAL_SIG_EVENT_EXTEND         0x0403UL
-#define FUNCTION_RAAL_SIG_EVENT_ENDED          0x0404UL
-#define FUNCTION_RAAL_SIG_EVENT_RADIO          0x0405UL
-#define FUNCTION_RAAL_SIG_EVENT_EXTEND_SUCCESS 0x0406UL
-#define FUNCTION_RAAL_SIG_EVENT_EXTEND_FAIL    0x0407UL
-#define FUNCTION_RAAL_EVT_BLOCKED              0x0408UL
-#define FUNCTION_RAAL_EVT_SESSION_IDLE         0x0409UL
-#define FUNCTION_RAAL_EVT_HFCLK_READY          0x040AUL
-#define FUNCTION_RAAL_SIG_EVENT_MARGIN_MOVE    0x040BUL
-
-#ifdef __cplusplus
+void nrf_802154_debug_log_init(void)
+{
+    // Let's check if address of generated __func__ will fit into log generated
+    // by @ref nrf_802154_log_function_enter
+    assert((uint32_t)((uintptr_t)(__func__)) < (1U << NRF_802154_DEBUG_LOG_MODULE_ID_BITPOS));
 }
-#endif
-
-#endif /* NRF_802154_DEBUG_H_ */

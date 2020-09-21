@@ -1,4 +1,4 @@
-/* Copyright (c) 2017, Nordic Semiconductor ASA
+/* Copyright (c) 2017 - 2019, Nordic Semiconductor ASA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,6 +105,8 @@
 
 #define PHR_OFFSET                   0                                            ///< Offset of the PHY header in a frame.
 
+#define RSSI_SETTLE_TIME_US          15                                           ///< Time required for RSSI measurements to be valid after signal level change.
+
 #define SECURITY_ENABLED_OFFSET      1                                            ///< Byte containing the Security Enabled bit.
 #define SECURITY_ENABLED_BIT         0x08                                         ///< Bits containing the Security Enabled field.
 #define SECURITY_LEVEL_MASK          0x07                                         ///< Mask of bits containing the Security level field.
@@ -152,17 +154,30 @@
 #define PHY_SYMBOLS_PER_OCTET        2                                            ///< Number of symbols in a single byte (octet).
 #define PHY_SHR_SYMBOLS              10                                           ///< Number of symbols in the Synchronization Header (SHR).
 
-#define ED_MIN_DBM                   (-94)                                        ///< dBm value corresponding to value 0 in the EDSAMPLE register.
+#if defined (NRF52840_XXAA) || defined(NRF52811_XXAA) || defined(NRF5340_XXAA_NETWORK)
+#define ED_MIN_DBM                   (-92)                                        ///< dBm value corresponding to value 0 in the EDSAMPLE register.
 #define ED_RESULT_FACTOR             4                                            ///< Factor needed to calculate the ED result based on the data from the RADIO peripheral.
+#elif defined (NRF52833_XXAA) || defined(NRF52820_XXAA)
+#define ED_MIN_DBM                   (-93)                                        ///< dBm value corresponding to value 0 in the EDSAMPLE register.
+#define ED_RESULT_FACTOR             5                                            ///< Factor needed to calculate the ED result based on the data from the RADIO peripheral.
+#else
+#error "Selected chip is not supported."
+#endif
+
 #define ED_RESULT_MAX                0xff                                         ///< Maximal ED result.
 
 #define BROADCAST_ADDRESS            ((uint8_t[SHORT_ADDRESS_SIZE]) {0xff, 0xff}) ///< Broadcast short address.
+
+#define MIN_SIFS_PERIOD_US           192                                          ///< Minimum Short IFS period default value in us.
+#define MIN_LIFS_PERIOD_US           640                                          ///< Minimum Long IFS period default value in us.
+#define MAX_SIFS_FRAME_SIZE          18                                           ///< Maximum frame length which can be followed by the Short Interframe Space.
 
 typedef enum
 {
     REQ_ORIG_HIGHER_LAYER,
     REQ_ORIG_CORE,
     REQ_ORIG_RSCH,
+    REQ_ORIG_TX_TIMEOUT,
 #if NRF_802154_CSMA_CA_ENABLED
     REQ_ORIG_CSMA_CA,
 #endif // NRF_802154_CSMA_CA_ENABLED
@@ -172,6 +187,9 @@ typedef enum
 #if NRF_802154_DELAYED_TRX_ENABLED
     REQ_ORIG_DELAYED_TRX,
 #endif // NRF_802154_DELAYED_TRX_ENABLED
+#if NRF_802154_IFS_ENABLED
+    REQ_ORIG_IFS,
+#endif // NRF_802154_IFS_ENABLED
 } req_originator_t;
 
-#endif // NRD_DRV_RADIO802154_CONST_H_
+#endif // NRF_802154_CONST_H_

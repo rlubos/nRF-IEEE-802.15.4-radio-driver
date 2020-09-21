@@ -34,6 +34,8 @@
  *
  */
 
+#define NRF_802154_MODULE_ID NRF_802154_MODULE_ID_CRITICAL_SECTION
+
 #include "nrf_802154_critical_section.h"
 
 #include <assert.h>
@@ -41,6 +43,7 @@
 
 #include "nrf_802154_config.h"
 #include "nrf_802154_debug.h"
+#include "nrf_802154_utils.h"
 #include "nrf_radio.h"
 #include "rsch/nrf_802154_rsch.h"
 #include "platform/lp_timer/nrf_802154_lp_timer.h"
@@ -116,6 +119,10 @@ static bool critical_section_enter(bool forced)
         (m_nested_critical_section_counter == 0) ||
         nested_critical_section_is_allowed_in_this_context())
     {
+        nrf_802154_mcu_critical_state_t mcu_cs;
+
+        nrf_802154_mcu_critical_enter(mcu_cs);
+
         do
         {
             cnt = __LDREXB(&m_nested_critical_section_counter);
@@ -129,6 +136,8 @@ static bool critical_section_enter(bool forced)
         radio_critical_section_enter();
         __DSB();
         __ISB();
+
+        nrf_802154_mcu_critical_exit(mcu_cs);
 
         m_critical_section_monitor++;
 
@@ -210,11 +219,11 @@ bool nrf_802154_critical_section_enter(void)
 {
     bool result;
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_CRIT_SECT_ENTER);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     result = critical_section_enter(false);
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_CRIT_SECT_ENTER);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 
     return result;
 }
@@ -223,22 +232,22 @@ void nrf_802154_critical_section_forcefully_enter(void)
 {
     bool critical_section_entered;
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_CRIT_SECT_ENTER);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     critical_section_entered = critical_section_enter(true);
     assert(critical_section_entered);
     (void)critical_section_entered;
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_CRIT_SECT_ENTER);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void nrf_802154_critical_section_exit(void)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_CRIT_SECT_EXIT);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     critical_section_exit();
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_CRIT_SECT_EXIT);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void nrf_802154_critical_section_nesting_allow(void)

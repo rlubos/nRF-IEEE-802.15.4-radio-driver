@@ -19,5 +19,5 @@
     "_toolchains": [
         "gcc"
     ],
-    "_name": "test_nrf_driver_fsm_rx"
+    "_name": "test_nrf_driver_cmsa_ca"
 }

@@ -36,6 +36,8 @@
  *
  */
 
+#define NRF_802154_MODULE_ID NRF_802154_MODULE_ID_RAAL
+
 #include "rsch/raal/nrf_raal_api.h"
 
 #include <assert.h>
@@ -119,7 +121,7 @@ void nrf_raal_continuous_mode_enter(void)
 {
     uint32_t time;
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RAAL_CONTINUOUS_ENTER);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     assert(!m_continuous_requested);
 
@@ -138,12 +140,12 @@ void nrf_raal_continuous_mode_enter(void)
 
     NVIC_EnableIRQ(TIMER0_IRQn);
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RAAL_CONTINUOUS_ENTER);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void nrf_raal_continuous_mode_exit(void)
 {
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RAAL_CONTINUOUS_EXIT);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     assert(m_continuous_requested);
 
@@ -152,7 +154,7 @@ void nrf_raal_continuous_mode_exit(void)
 
     nrf_802154_pin_clr(PIN_DBG_TIMESLOT_ACTIVE);
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RAAL_CONTINUOUS_EXIT);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void nrf_raal_continuous_ended(void)
@@ -184,11 +186,51 @@ uint32_t nrf_raal_timeslot_us_left_get(void)
            (m_margin_timestamp - timer) : 0;
 }
 
+static void timeslot_dropped_handle(void)
+{
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    NRF_MWU->REGIONENSET = MWU_REGIONENSET_PRGN0WA_Msk | MWU_REGIONENSET_PRGN0RA_Msk;
+
+    NRF_TIMER0->TASKS_STOP  = 1;
+    NRF_TIMER0->TASKS_CLEAR = 1;
+
+    NRF_TIMER0->CC[0] = m_started_timestamp;
+
+    NRF_TIMER0->TASKS_START = 1;
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+}
+
+static void timeslot_started_handle(void)
+{
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    NRF_MWU->REGIONENCLR = MWU_REGIONENCLR_PRGN0WA_Msk | MWU_REGIONENCLR_PRGN0RA_Msk;
+
+    NRF_TIMER0->CC[0] = m_margin_timestamp;
+
+    continuous_grant();
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+}
+
+static void safety_margin_exceeded_handle(void)
+{
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
+
+    NRF_TIMER0->CC[0] = m_ended_timestamp;
+
+    continuous_revoke();
+
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
+}
+
 void TIMER0_IRQHandler(void)
 {
     uint32_t ev_timestamp;
 
-    nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RAAL_SIG_HANDLER);
+    nrf_802154_log_function_enter(NRF_802154_LOG_VERBOSITY_LOW);
 
     if (NRF_TIMER0->EVENTS_COMPARE[0])
     {
@@ -200,40 +242,15 @@ void TIMER0_IRQHandler(void)
 
             if (ev_timestamp == m_ended_timestamp)
             {
-                nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RAAL_SIG_EVENT_ENDED);
-
-                NRF_MWU->REGIONENSET = MWU_REGIONENSET_PRGN0WA_Msk | MWU_REGIONENSET_PRGN0RA_Msk;
-
-                NRF_TIMER0->TASKS_STOP  = 1;
-                NRF_TIMER0->TASKS_CLEAR = 1;
-
-                NRF_TIMER0->CC[0] = m_started_timestamp;
-
-                NRF_TIMER0->TASKS_START = 1;
-
-                nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RAAL_SIG_EVENT_ENDED);
+                timeslot_dropped_handle();
             }
             else if (ev_timestamp == m_started_timestamp)
             {
-                nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RAAL_SIG_EVENT_START);
-
-                NRF_MWU->REGIONENCLR = MWU_REGIONENCLR_PRGN0WA_Msk | MWU_REGIONENCLR_PRGN0RA_Msk;
-
-                NRF_TIMER0->CC[0] = m_margin_timestamp;
-
-                continuous_grant();
-
-                nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RAAL_SIG_EVENT_START);
+                timeslot_started_handle();
             }
             else if (ev_timestamp == m_margin_timestamp)
             {
-                nrf_802154_log(EVENT_TRACE_ENTER, FUNCTION_RAAL_SIG_EVENT_MARGIN);
-
-                NRF_TIMER0->CC[0] = m_ended_timestamp;
-
-                continuous_revoke();
-
-                nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RAAL_SIG_EVENT_MARGIN);
+                safety_margin_exceeded_handle();
             }
             else
             {
@@ -242,7 +259,7 @@ void TIMER0_IRQHandler(void)
         }
     }
 
-    nrf_802154_log(EVENT_TRACE_EXIT, FUNCTION_RAAL_SIG_HANDLER);
+    nrf_802154_log_function_exit(NRF_802154_LOG_VERBOSITY_LOW);
 }
 
 void MWU_IRQHandler(void)

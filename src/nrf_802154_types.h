@@ -54,6 +54,7 @@ typedef uint8_t nrf_802154_state_t;
 #define NRF_802154_STATE_ENERGY_DETECTION   0x05 // !< Radio in the energy detection state.
 #define NRF_802154_STATE_CCA                0x06 // !< Radio in the CCA state.
 #define NRF_802154_STATE_CONTINUOUS_CARRIER 0x07 // !< Radio in the continuous carrier state.
+#define NRF_802154_STATE_MODULATED_CARRIER  0x08 // !< Radio in the modulated carrier state.
 
 /**
  * @brief Errors reported during the frame transmission.
@@ -68,6 +69,7 @@ typedef uint8_t nrf_802154_tx_error_t;
 #define NRF_802154_TX_ERROR_NO_ACK          0x05 // !< ACK frame was not received during the timeout period.
 #define NRF_802154_TX_ERROR_ABORTED         0x06 // !< Procedure was aborted by another operation.
 #define NRF_802154_TX_ERROR_TIMESLOT_DENIED 0x07 // !< Transmission did not start due to a denied timeslot request.
+#define NRF_802154_TX_ERROR_TIMEOUT         0x08 // !< Timeout specified for a transmission has been reached.
 
 /**
  * @brief Possible errors during the frame reception.
@@ -85,6 +87,9 @@ typedef uint8_t nrf_802154_rx_error_t;
 #define NRF_802154_RX_ERROR_DELAYED_TIMEOUT         0x08 // !< Delayed reception timeslot ended.
 #define NRF_802154_RX_ERROR_INVALID_LENGTH          0x09 // !< Received a frame with invalid length.
 #define NRF_802154_RX_ERROR_DELAYED_ABORTED         0x0A // !< Delayed operation in the ongoing state was aborted by other request.
+#define NRF_802154_RX_ERROR_NO_ACK                  0x0B // !< Ack should have been transmitted, but the driver state prevented the transmission.
+#define NRF_802154_RX_ERROR_ACK_DENIED              0x0C // !< Ack should have been transmitted, but the transmission preconditions were not approved.
+#define NRF_802154_RX_ERROR_ACK_ABORTED             0x0D // !< Ack transmission was aborted by preconditions denial or another opeartion.
 
 /**
  * @brief Possible errors during the energy detection.
@@ -160,6 +165,153 @@ typedef uint8_t nrf_802154_src_addr_match_t;
  */
 
 #define NRF_802154_RSSI_INVALID INT8_MAX
+
+/**
+ * @brief Mode of triggering receive request to Coex arbiter.
+ *
+ * Possible values:
+ * - @ref NRF_802154_COEX_RX_REQUEST_MODE_ENERGY_DETECTION,
+ * - @ref NRF_802154_COEX_RX_REQUEST_MODE_PREAMBLE,
+ * - @ref NRF_802154_COEX_RX_REQUEST_MODE_DESTINED
+ */
+typedef uint8_t nrf_802154_coex_rx_request_mode_t;
+
+#define NRF_802154_COEX_RX_REQUEST_MODE_ENERGY_DETECTION 0x01 // !< Coex requests to arbiter in receive mode upon energy detected.
+#define NRF_802154_COEX_RX_REQUEST_MODE_PREAMBLE         0x02 // !< Coex requests to arbiter in receive mode upon preamble reception.
+#define NRF_802154_COEX_RX_REQUEST_MODE_DESTINED         0x03 // !< Coex requests to arbiter in receive mode upon detection that frame is addressed to this device.
+
+/**
+ * @brief Mode of triggering transmit request to Coex arbiter.
+ *
+ * Possible values:
+ * - @ref NRF_802154_COEX_TX_REQUEST_MODE_FRAME_READY,
+ * - @ref NRF_802154_COEX_TX_REQUEST_MODE_CCA_START,
+ * - @ref NRF_802154_COEX_TX_REQUEST_MODE_CCA_DONE
+ */
+typedef uint8_t nrf_802154_coex_tx_request_mode_t;
+
+#define NRF_802154_COEX_TX_REQUEST_MODE_FRAME_READY 0x01 // !< Coex requests to arbiter in transmit mode when the frame is ready to be transmitted.
+#define NRF_802154_COEX_TX_REQUEST_MODE_CCA_START   0x02 // !< Coex requests to arbiter in transmit mode before CCA is started.
+#define NRF_802154_COEX_TX_REQUEST_MODE_CCA_DONE    0x03 // !< Coex requests to arbiter in transmit mode after CCA is finished.
+
+/**
+ * @brief Mode of handling Interframe spacing.
+ *
+ * Possible values:
+ * - @ref NRF_802154_IFS_MODE_DISABLED,
+ * - @ref NRF_802154_IFS_MODE_MATCHING_ADDRESSES,
+ * - @ref NRF_802154_IFS_MODE_ALWAYS
+ */
+typedef uint8_t nrf_802154_ifs_mode_t;
+
+#define NRF_802154_IFS_MODE_DISABLED           0x00 // !< Interframe spacing is never inserted.
+#define NRF_802154_IFS_MODE_MATCHING_ADDRESSES 0x01 // !< Interframe spacing is inserted only on matching addresses.
+#define NRF_802154_IFS_MODE_ALWAYS             0x02 // !< Interframe spacing is always inserted.
+
+/**
+ * @brief Type of structure holding statistic counters.
+ *
+ * This structure holds counters of @c uint32_t type only.
+ */
+typedef struct
+{
+    /**@brief Number of failed CCA attempts. */
+    uint32_t cca_failed_attempts;
+    /**@brief Number of frames received with correct CRC and with filtering passing. */
+    uint32_t received_frames;
+    /**@brief Number of times energy was detected in receive mode.*/
+    uint32_t received_energy_events;
+    /**@brief Number of times a preamble was received in receive mode. */
+    uint32_t received_preambles;
+    /**@brief Number of transmitted frames. */
+    uint32_t transmitted_frames;
+    /**@brief Number of transmitted ACK frames. */
+    uint32_t transmitted_ack_frames;
+    /**@brief Number of ACK frames transmitted on unsolicited grant. */
+    uint32_t transmitted_ack_frames_unsolicited;
+    /**@brief Number of coex tx requests issued to coex arbiter. */
+    uint32_t coex_tx_requests;
+    /**@brief Number of coex rx requests issued to coex arbiter. */
+    uint32_t coex_rx_requests;
+    /**@brief Number of coex tx requests issued to coex arbiter that have been granted. */
+    uint32_t coex_granted_tx_requests;
+    /**@brief Number of coex rx requests issued to coex arbiter that have been granted. */
+    uint32_t coex_granted_rx_requests;
+    /**@brief Number of coex tx requests issued to coex arbiter that have been denied. */
+    uint32_t coex_denied_tx_requests;
+    /**@brief Number of coex rx requests issued to coex arbiter that have been denied. */
+    uint32_t coex_denied_rx_requests;
+    /**@brief Number of coex grant activations that have been not requested. */
+    uint32_t coex_unsolicited_grants;
+    /**@brief Number of ACK TX drop due to denied preconditions. */
+    uint32_t denied_ack_requests;
+    /**@brief Number of times ACK TX was aborted. */
+    uint32_t aborted_ack_requests;
+    /**@brief Number of times ACK TX was dropped due to bad state. */
+    uint32_t failed_ack_requests;
+    /**@brief Number of lost frames when TX is granted during receiving while CSMA-CA backoff is extended by denied coex. */
+    uint32_t lost_rx_during_csmaca;
+} nrf_802154_stat_counters_t;
+
+/**
+ * @brief Type of structure holding time stamps of certain events.
+ */
+typedef struct
+{
+    /**@brief Time stamp of last CSMA/CA procedure started. */
+    uint32_t last_csmaca_start_timestamp;
+    /**@brief Time stamp of last CCA start attempt. */
+    uint32_t last_cca_start_timestamp;
+    /**@brief Time stamp of last CCA attempt finished with CCA IDLE (channel was free to transmit). */
+    uint32_t last_cca_idle_timestamp;
+    /**@brief Time stamp when last bit of transmitted frame was sent on the air. */
+    uint32_t last_tx_end_timestamp;
+    /**@brief Time stamp when last bit of acknowledge frame was received */
+    uint32_t last_ack_end_timestamp;
+    /**@brief Time stamp when last bit of received frame was received. */
+    uint32_t last_rx_end_timestamp;
+    /**@brief Time stamp of last issued coex request. */
+    uint32_t last_coex_request_timestamp;
+    /**@brief Time stamp of last coex grant. 
+     * In case of unsolicited grants, grant is not timestamped until request is issued. */
+    uint32_t last_coex_grant_timestamp;
+    /**@brief Flag indicating validity of current grant timestamp. 
+     * If set to false, last request was not granted and last_coex_grant_timestamp is outdated. */
+    bool last_coex_grant_valid;
+} nrf_802154_stat_timestamps_t;
+
+/**
+ * @brief Type of structure holding total times spent in certain states.
+ *
+ * This structure holds fields of @c uint64_t type only.
+ */
+typedef struct
+{
+    /**@brief Total time in microseconds spent with receiver turned on, but not actually receiving any frames. */
+    uint64_t total_listening_time;
+    /**@brief Total time in microseconds spent with receiver turned on and actually receiving frames. */
+    uint64_t total_receive_time;
+    /**@brief Total time in microseconds spent on transmission. */
+    uint64_t total_transmit_time;
+} nrf_802154_stat_totals_t;
+
+/**
+ * @brief Type of structure holding statistics about the Radio Driver behavior.
+ */
+typedef struct
+{
+    /**@brief Statistic counters */
+    nrf_802154_stat_counters_t   counters;
+
+    /**@brief Time stamps of events */
+    nrf_802154_stat_timestamps_t timestamps;
+} nrf_802154_stats_t;
+
+/**
+ * @brief Function pointer used for notifying about transmission failure.
+ */
+typedef void (* nrf_802154_transmit_failed_notify_t)(const uint8_t       * p_frame,
+                                                     nrf_802154_tx_error_t error);
 
 /**
  *@}

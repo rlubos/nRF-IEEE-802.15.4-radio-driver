@@ -98,6 +98,12 @@ bool nrf_802154_request_continuous_carrier(nrf_802154_term_t term_lvl)
     REQUEST_FUNCTION(nrf_802154_core_continuous_carrier, term_lvl)
 }
 
+bool nrf_802154_request_modulated_carrier(nrf_802154_term_t term_lvl,
+                                          const uint8_t   * p_data)
+{
+    REQUEST_FUNCTION(nrf_802154_core_modulated_carrier, term_lvl, p_data)
+}
+
 bool nrf_802154_request_buffer_free(uint8_t * p_data)
 {
     REQUEST_FUNCTION(nrf_802154_core_notify_buffer_free, p_data)

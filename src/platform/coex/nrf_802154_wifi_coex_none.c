@@ -42,7 +42,8 @@
 
 void nrf_802154_wifi_coex_init(void)
 {
-    // Intentionally empty
+    // Assume RF Access is always granted.
+    nrf_802154_wifi_coex_granted(WIFI_COEX_REQUEST_STATE_NO_REQUEST);
 }
 
 void nrf_802154_wifi_coex_uninit(void)
@@ -50,9 +51,9 @@ void nrf_802154_wifi_coex_uninit(void)
     // Intentionally empty
 }
 
-void nrf_802154_wifi_coex_prio_request(rsch_prio_t priority)
+void nrf_802154_wifi_coex_prio_request(rsch_prio_mask_t priority_mask)
 {
-    (void)priority;
+    (void)priority_mask;
     // Intentionally empty
 }
 
@@ -66,4 +67,20 @@ __WEAK void nrf_802154_wifi_coex_prio_changed(rsch_prio_t priority)
 {
     (void)priority;
     // Intentionally empty
+}
+
+bool nrf_802154_wifi_coex_enable(void)
+{
+    // Wifi coex signaling cannot be enabled
+    return false;
+}
+
+void nrf_802154_wifi_coex_disable(void)
+{
+    // Intentionally empty
+}
+
+bool nrf_802154_wifi_coex_is_enabled(void)
+{
+    return false;
 }

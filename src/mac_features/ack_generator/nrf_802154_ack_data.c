@@ -703,6 +703,7 @@ bool nrf_802154_ack_data_pending_bit_should_be_set(const uint8_t * p_frame)
             break;
 
         default:
+            ret = false;
             assert(false);
     }
 

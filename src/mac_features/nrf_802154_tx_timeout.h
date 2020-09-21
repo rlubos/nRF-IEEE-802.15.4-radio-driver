@@ -1,4 +1,4 @@
-/* Copyright (c) 2017 - 2018, Nordic Semiconductor ASA
+/* Copyright (c) 2020, Nordic Semiconductor ASA
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,53 +28,36 @@
  *
  */
 
-#include "unity.h"
+#ifndef NRF_802154_TX_TIMEOUT_H__
+#define NRF_802154_TX_TIMEOUT_H__
 
-#include "nrf_802154_config.h"
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "nrf_802154_const.h"
-#include "mock_nrf_802154.h"
-#include "mock_nrf_802154_ack_data.h"
-#include "mock_nrf_802154_core_hooks.h"
-#include "mock_nrf_802154_debug.h"
-#include "mock_nrf_802154_notification.h"
-#include "mock_nrf_802154_pib.h"
-#include "mock_nrf_802154_priority_drop.h"
-#include "mock_nrf_802154_procedures_duration.h"
-#include "mock_nrf_802154_rx_buffer.h"
-#include "mock_nrf_fem_protocol_api.h"
-#include "mock_nrf_raal_api.h"
-#include "mock_nrf_radio.h"
-#include "mock_nrf_timer.h"
-#include "mock_nrf_egu.h"
-#include "mock_nrf_ppi.h"
+#include "nrf_802154_types.h"
 
-#define __ISB()
-#define __LDREXB(ptr)           0
-#define __STREXB(value, ptr)    0
+/**
+ * @brief Schedules or aborts transmission timeout timer.
+ * 
+ * If the transmission is ready to be performed, it certainly is not going to time out. The timeout
+ * timer can be stopped safely.
+ * If the transmission is not ready to be performed and it is pending, the timeout timer shall be
+ * started
+ * 
+ * @param[in]  p_frame  Pointer to the buffer that contains the PHR and PSDU of the transmitted frame.
+ * @param[in]  ready    Flag that indicates if the transmission is going to execute.
+ */
+void nrf_802154_tx_timeout_transmission_ready(const uint8_t * p_frame, bool ready);
 
-void nrf_802154_rx_started(void){}
-void nrf_802154_tx_started(const uint8_t * p_frame){}
-void nrf_802154_rx_ack_started(void){}
-void nrf_802154_tx_ack_started(const uint8_t * p_data){}
+/**
+ * @brief Aborts transmission timeout timer.
+ *
+ * @param[in]  term_lvl  Termination level set by the request to abort the ongoing operation.
+ * @param[in]  req_orig  Module that originates this request.
+ *
+ * @retval  true   Transmission timeout timer has been stopped.
+ */
+bool nrf_802154_tx_timeout_abort(nrf_802154_term_t term_lvl, req_originator_t req_orig);
 
-#include "nrf_802154_core.c"
-
-
-/***********************************************************************************/
-/***********************************************************************************/
-/***********************************************************************************/
-
-void setUp(void)
-{
-
-}
-
-void tearDown(void)
-{
-
-}
-
-void test_ShouldPass(void)
-{
-    TEST_ASSERT_EQUAL_UINT32(0, 0);
-}
+#endif // NRF_802154_TX_TIMEOUT_H__

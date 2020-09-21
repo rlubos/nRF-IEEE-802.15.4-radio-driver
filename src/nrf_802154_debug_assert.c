@@ -29,46 +29,64 @@
  */
 
 /**
- * @brief Module that contains debug helpers for the 802.15.4 radio driver for the nRF SoC devices.
+ * @file
+ *   This file implements debug assert helpers for the nRF 802.15.4 radio driver.
  *
  */
 
-#ifndef NRF_802154_DEBUG_H_
-#define NRF_802154_DEBUG_H_
+#include "nrf_802154_debug.h"
 
 #include <stdint.h>
 
-#include "nrf_802154_debug_core.h"
+#include "nrf.h"
 
-#ifdef __cplusplus
-extern "C" {
+void __assert_func(const char * file, int line, const char * func, const char * cond)
+{
+    (void)file;
+    (void)line;
+    (void)func;
+    (void)cond;
+
+#if defined(ENABLE_DEBUG_ASSERT_BKPT) && (ENABLE_DEBUG_ASSERT_BKPT != 0)
+    __BKPT(0);
 #endif
+    __disable_irq();
 
-#define EVENT_TIMESLOT_REQUEST        0x0007UL
-#define EVENT_TIMESLOT_REQUEST_RESULT 0x0008UL
-
-/* Reserved for RAAL: 0x0300 - 0x047F */
-
-#define FUNCTION_RAAL_CRIT_SECT_ENTER          0x0301UL
-#define FUNCTION_RAAL_CRIT_SECT_EXIT           0x0302UL
-#define FUNCTION_RAAL_CONTINUOUS_ENTER         0x0303UL
-#define FUNCTION_RAAL_CONTINUOUS_EXIT          0x0304UL
-
-#define FUNCTION_RAAL_SIG_HANDLER              0x0400UL
-#define FUNCTION_RAAL_SIG_EVENT_START          0x0401UL
-#define FUNCTION_RAAL_SIG_EVENT_MARGIN         0x0402UL
-#define FUNCTION_RAAL_SIG_EVENT_EXTEND         0x0403UL
-#define FUNCTION_RAAL_SIG_EVENT_ENDED          0x0404UL
-#define FUNCTION_RAAL_SIG_EVENT_RADIO          0x0405UL
-#define FUNCTION_RAAL_SIG_EVENT_EXTEND_SUCCESS 0x0406UL
-#define FUNCTION_RAAL_SIG_EVENT_EXTEND_FAIL    0x0407UL
-#define FUNCTION_RAAL_EVT_BLOCKED              0x0408UL
-#define FUNCTION_RAAL_EVT_SESSION_IDLE         0x0409UL
-#define FUNCTION_RAAL_EVT_HFCLK_READY          0x040AUL
-#define FUNCTION_RAAL_SIG_EVENT_MARGIN_MOVE    0x040BUL
-
-#ifdef __cplusplus
+    while (1)
+        ;
 }
-#endif
 
-#endif /* NRF_802154_DEBUG_H_ */
+void __aeabi_assert(const char * expr, const char * file, int line)
+{
+    (void)expr;
+    (void)file;
+    (void)line;
+
+#if defined(ENABLE_DEBUG_ASSERT_BKPT) && (ENABLE_DEBUG_ASSERT_BKPT != 0)
+    __BKPT(0);
+#endif
+    __disable_irq();
+
+    while (1)
+        ;
+}
+
+void __assert(const char *expression, const char *filename, int line)
+{
+    (void)expression;
+    (void)filename;
+    (void)line;
+
+#if defined(ENABLE_DEBUG_ASSERT_BKPT) && (ENABLE_DEBUG_ASSERT_BKPT != 0)
+    __BKPT(0);
+#endif
+    __disable_irq();
+
+    while (1)
+        ;
+}
+
+void nrf_802154_debug_assert_init(void)
+{
+    // Intentionally empty
+}

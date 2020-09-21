@@ -44,15 +44,22 @@
 #include "mac_features/nrf_802154_ack_timeout.h"
 #include "mac_features/nrf_802154_csma_ca.h"
 #include "mac_features/nrf_802154_delayed_trx.h"
+#include "mac_features/nrf_802154_ifs.h"
+#include "mac_features/nrf_802154_tx_timeout.h"
 #include "nrf_802154_config.h"
 #include "nrf_802154_types.h"
 
 typedef bool (* abort_hook)(nrf_802154_term_t term_lvl, req_originator_t req_orig);
+typedef void (* transmission_ready_hook)(const uint8_t * p_frame, bool ready);
 typedef void (* transmitted_hook)(const uint8_t * p_frame);
 typedef bool (* tx_failed_hook)(const uint8_t * p_frame, nrf_802154_tx_error_t error);
 typedef bool (* tx_started_hook)(const uint8_t * p_frame);
 typedef void (* rx_started_hook)(const uint8_t * p_frame);
 typedef void (* rx_ack_started_hook)(void);
+typedef void (* prio_changed_hook)(uint32_t old_prio, uint32_t new_prio);
+typedef bool (* pre_transmission_hook)(const uint8_t                     * p_frame,
+                                       bool                                cca,
+                                       nrf_802154_transmit_failed_notify_t notify_function);
 
 /* Since some compilers do not allow empty initializers for arrays with unspecified bounds,
  * NULL pointer is appended to below arrays if the compiler used is not GCC. It is intentionally
@@ -73,7 +80,28 @@ static const abort_hook m_abort_hooks[] =
     nrf_802154_delayed_trx_abort,
 #endif
 
+#if NRF_802154_IFS_ENABLED
+    nrf_802154_ifs_abort,
+#endif
+
+    nrf_802154_tx_timeout_abort,
+};
+
+static const pre_transmission_hook m_pre_transmission_hooks[] =
+{
+#if NRF_802154_CSMA_CA_ENABLED
+    nrf_802154_csma_ca_pretransmission,
+#endif
+#if NRF_802154_IFS_ENABLED
+    nrf_802154_ifs_pretransmission,
+#endif
+
     NULL,
+};
+
+static const transmission_ready_hook m_transmission_ready_hooks[] = 
+{
+    nrf_802154_tx_timeout_transmission_ready
 };
 
 static const transmitted_hook m_transmitted_hooks[] =
@@ -81,7 +109,9 @@ static const transmitted_hook m_transmitted_hooks[] =
 #if NRF_802154_ACK_TIMEOUT_ENABLED
     nrf_802154_ack_timeout_transmitted_hook,
 #endif
-
+#if NRF_802154_IFS_ENABLED
+    nrf_802154_ifs_transmitted_hook,
+#endif
     NULL,
 };
 
@@ -129,6 +159,15 @@ static const rx_ack_started_hook m_rx_ack_started_hooks[] =
     NULL,
 };
 
+static const prio_changed_hook m_prio_changed_hooks[] =
+{
+#if NRF_802154_CSMA_CA_ENABLED
+    nrf_802154_csma_ca_prio_changed_hook,
+#endif
+
+    NULL,
+};
+
 bool nrf_802154_core_hooks_terminate(nrf_802154_term_t term_lvl, req_originator_t req_orig)
 {
     bool result = true;
@@ -149,6 +188,46 @@ bool nrf_802154_core_hooks_terminate(nrf_802154_term_t term_lvl, req_originator_
     }
 
     return result;
+}
+
+bool nrf_802154_core_hooks_pre_transmission(const uint8_t                     * p_frame,
+                                            bool                                cca,
+                                            nrf_802154_transmit_failed_notify_t notify_function)
+{
+    bool result = true;
+
+    for (uint32_t i = 0; i < sizeof(m_pre_transmission_hooks) / sizeof(m_pre_transmission_hooks[0]);
+         i++)
+    {
+        if (m_pre_transmission_hooks[i] == NULL)
+        {
+            break;
+        }
+
+        result = m_pre_transmission_hooks[i](p_frame, cca, notify_function);
+
+        if (!result)
+        {
+            break;
+        }
+    }
+
+    return result;
+}
+
+void nrf_802154_core_hooks_transmission_ready(const uint8_t * p_frame, bool ready)
+{
+    uint32_t nb_hooks = sizeof(m_transmission_ready_hooks) / sizeof(m_transmission_ready_hooks[0]);
+
+    for (uint32_t i = 0; i < nb_hooks; i++)
+    {
+        if (m_transmission_ready_hooks[i] == NULL)
+        {
+            break;
+        }
+
+        m_transmission_ready_hooks[i](p_frame, ready);
+    }
 }
 
 void nrf_802154_core_hooks_transmitted(const uint8_t * p_frame)
@@ -232,5 +311,18 @@ void nrf_802154_core_hooks_rx_ack_started(void)
         }
 
         m_rx_ack_started_hooks[i]();
+    }
+}
+
+void nrf_802154_core_hooks_prio_changed(uint32_t old_prio, uint32_t new_prio)
+{
+    for (uint32_t i = 0; i < sizeof(m_prio_changed_hooks) / sizeof(m_prio_changed_hooks[0]); i++)
+    {
+        if (m_prio_changed_hooks[i] == NULL)
+        {
+            break;
+        }
+
+        m_prio_changed_hooks[i](old_prio, new_prio);
     }
 }

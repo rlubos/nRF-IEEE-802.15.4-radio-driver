@@ -186,6 +186,154 @@ void nrf_802154_pib_cca_cfg_set(const nrf_802154_cca_cfg_t * p_cca_cfg);
  */
 void nrf_802154_pib_cca_cfg_get(nrf_802154_cca_cfg_t * p_cca_cfg);
 
+/**
+ * @brief Sets Coex request mode used in receive operations.
+ *
+ * @param[in] mode  Coex receive request mode.
+ *
+ * @retval true     When value provided by @p mode param is supported.
+ * @retval false    Otherwise.
+ */
+bool nrf_802154_pib_coex_rx_request_mode_set(nrf_802154_coex_rx_request_mode_t mode);
+
+/**
+ * @brief Gets Coex request mode used in receive operations.
+ *
+ * @return Current Coex receive request mode.
+ */
+nrf_802154_coex_rx_request_mode_t nrf_802154_pib_coex_rx_request_mode_get(void);
+
+/**
+ * @brief Sets Coex request mode used in transmit operations.
+ *
+ * @param[in] mode  Coex transmit request mode.
+ *
+ * @retval true     When value provided by @p mode param is supported.
+ * @retval false    Otherwise.
+ */
+bool nrf_802154_pib_coex_tx_request_mode_set(nrf_802154_coex_tx_request_mode_t mode);
+
+/**
+ * @brief Gets Coex request mode used in transmit operations.
+ *
+ * @return Current Coex transmit request mode.
+ */
+nrf_802154_coex_tx_request_mode_t nrf_802154_pib_coex_tx_request_mode_get(void);
+
+#if NRF_802154_CSMA_CA_ENABLED
+/**
+ * @brief Sets the minimum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @param[in] min_be  Minimum value of the backoff exponent.
+ *
+ * @retval true   When value provided by @p min_be does not exceed the implementation limit ( <= 8).
+ * @retval false  Otherwise.
+ */
+bool nrf_802154_pib_csmaca_min_be_set(uint8_t min_be);
+
+/**
+ * @brief Gets the minimum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @return Current minimum value of the backoff exponent.
+ */
+uint8_t nrf_802154_pib_csmaca_min_be_get(void);
+
+/**
+ * @brief Sets the maximum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @param[in] max_be  Maximum value of the backoff exponent.
+ *
+ * @retval true   When value provided by @p max_be does not exceed the implementation limit ( <= 8).
+ * @retval false  Otherwise.
+ */
+bool nrf_802154_pib_csmaca_max_be_set(uint8_t max_be);
+
+/**
+ * @brief Gets the maximum value of the backoff exponent (BE) in the CSMA-CA algorithm.
+ *
+ * @return Current maximum value of the backoff exponent.
+ */
+uint8_t nrf_802154_pib_csmaca_max_be_get(void);
+
+/**
+ * @brief Sets the maximum number of backoffs the CSMA-CA algorithm will attempt before declaring
+ *        a channel access failure.
+ *
+ * @param[in] max_backoffs  Maximum number of backoffs.
+ */
+void nrf_802154_pib_csmaca_max_backoffs_set(uint8_t max_backoffs);
+
+/**
+ * @brief Gets the maximum number of backoffs the CSMA-CA algorithm will attempt before declaring
+ *        a channel access failure.
+ *
+ * @return Current maximum number of backoffs.
+ */
+uint8_t nrf_802154_pib_csmaca_max_backoffs_get(void);
+
+#endif // NRF_802154_CSMA_CA_ENABLED
+
+#if NRF_802154_IFS_ENABLED
+/**
+ * @brief Gets IFS operation mode.
+ *
+ * @return Current IFS operation mode. Refer to @ref nrf_802154_ifs_mode_t for details.
+ */
+nrf_802154_ifs_mode_t nrf_802154_pib_ifs_mode_get(void);
+
+/**
+ * @brief Sets IFS operation mode.
+ *
+ * @param[in] mode  IFS operation mode. Refer to @ref nrf_802154_ifs_mode_t for details.
+ *
+ * @retval    true  The update of PIB was successful.
+ * @retval    false The update of PIB failed due to the unsupported mode.
+ */
+bool nrf_802154_pib_ifs_mode_set(nrf_802154_ifs_mode_t mode);
+
+/**
+ * @brief Gets Short IFS period in microseconds.
+ *
+ * @return Current Short IFS period in microseconds.
+ */
+uint16_t nrf_802154_pib_ifs_min_sifs_period_get(void);
+
+/**
+ * @brief Sets Short IFS period in microseconds.
+ *
+ * @param[in] period Short IFS period in microseconds.
+ */
+void nrf_802154_pib_ifs_min_sifs_period_set(uint16_t period);
+
+/**
+ * @brief Gets Long IFS period in microseconds.
+ *
+ * @return Current Long IFS period in microseconds.
+ */
+uint16_t nrf_802154_pib_ifs_min_lifs_period_get(void);
+
+/**
+ * @brief Sets Long IFS period in microseconds.
+ *
+ * @param[in] period Long IFS period in microseconds.
+ */
+void nrf_802154_pib_ifs_min_lifs_period_set(uint16_t period);
+#endif // NRF_802154_IFS_ENABLED
+
+/**
+ * @brief Sets the transmission timeout.
+ * 
+ * @param[in] timeout_us  Transmission timeout in microseconds.
+ */
+void nrf_802154_pib_tx_timeout_set(uint32_t timeout_us);
+
+/**
+ * @brief Gets the transmission timeout.
+ * 
+ * @return Current transmission timeout in microseconds.
+ */
+uint32_t nrf_802154_pib_tx_timeout_get(void);
+
 #ifdef __cplusplus
 }
 #endif

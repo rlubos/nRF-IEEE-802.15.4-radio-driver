@@ -37,6 +37,8 @@
 #include "nrf_802154_const.h"
 #include "nrf_802154_types.h"
 
+#if NRF_802154_DELAYED_TRX_ENABLED
+
 /**
  * @defgroup nrf_802154_delayed_trx Delayed transmission and reception window features
  * @{
@@ -143,5 +145,7 @@ void nrf_802154_delayed_trx_rx_started_hook(const uint8_t * p_frame);
 /**
  *@}
  **/
+
+#endif // NRF_802154_DELAYED_TRX_ENABLED
 
 #endif // NRF_802154_DELAYED_TRX_H__

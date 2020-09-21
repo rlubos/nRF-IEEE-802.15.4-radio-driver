@@ -47,6 +47,7 @@
  * are propagated through the driver.
  */
 
+
 /**
  * @brief Processes hooks for the termination request.
  *
@@ -57,6 +58,36 @@
  * @retval false  There is an ongoing procedure that cannot be aborted due to a too low @p term_lvl.
  */
 bool nrf_802154_core_hooks_terminate(nrf_802154_term_t term_lvl, req_originator_t req_orig);
+
+/**
+ * @brief Processes hooks which are to fire before the transmission request.
+ *
+ * @param[in] p_frame         Pointer to a buffer that contains PHR and PSDU of the frame
+ *                            that is to be transmitted.
+ *
+ * @param[in] cca             Whether to start with cca or not.
+ * 
+ * @param[in] notify_function Pointer to a function that should be called to notify about the
+ *                            failure of the operation started by this hook (if any).
+ *
+ * @retval true       Frame can be sent immediately.
+ * @retval false      Hooks have handled the frame - upper layer should not worry about it anymore.
+ */
+bool nrf_802154_core_hooks_pre_transmission(const uint8_t                     * p_frame,
+                                            bool                                cca,
+                                            nrf_802154_transmit_failed_notify_t notify_function);
+
+/**
+ * @brief Processes hooks which are to fire when transmission is ready to be executed.
+ * 
+ * @param[in] p_frame Pointer to a buffer that contains PHR and PSDU of the frame
+ *                    that is to be transmitted.
+ * @param[in] ready   Flag that indicates if the transmission is going to execute.
+ * 
+ * @retval true       Frame can be sent immediately.
+ * @retval false      Hooks have handled the frame and it is not to be propagated to the MAC layer.
+ */
+void nrf_802154_core_hooks_transmission_ready(const uint8_t * p_frame, bool ready);
 
 /**
  * @brief Processes hooks for the transmitted event.
@@ -103,6 +134,14 @@ void nrf_802154_core_hooks_rx_started(const uint8_t * p_frame);
  * @brief Processes hooks for the RX ACK started event.
  */
 void nrf_802154_core_hooks_rx_ack_started(void);
+
+/**
+ * @brief Processes hooks which are to fire when approved preconditions change.
+ * 
+ * @param[in] old_prio  Previous approved priority.
+ * @param[in] new_prio  Current approved priority.
+ */
+void nrf_802154_core_hooks_prio_changed(uint32_t old_prio, uint32_t new_prio);
 
 /**
  *@}
