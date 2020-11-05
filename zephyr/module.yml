@@ -1,0 +1,2 @@
+build:
+  cmake: ../../../zephyr/modules/nrf_802154_radio
